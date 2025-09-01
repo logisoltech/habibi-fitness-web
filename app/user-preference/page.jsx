@@ -1,16 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import Header from "../../components/Header";
-import Footer from "../../components/Footer";
-import { font } from "../../components/font/font";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 
-export default function SignUp() {
+import Header from "../components/Header";
+import Footer from "../components/Footer";
+import { font } from "../components/font/font";
+
+import { useAuth } from "../contexts/AuthContext";
+import { useRouter } from "next/navigation";
+
+export default function UserPreference() {
+  const { user, apiCall, isAuthenticated } = useAuth();
+  const router = useRouter();
+
   const [selectedMealTimes, setSelectedMealTimes] = useState([
     "lunch",
     "dinner",
   ]);
+
+  useEffect(() => {
+    console.log("Selected Meal Times", selectedMealTimes);
+  }, [selectedMealTimes]);
+
   const [selectedWeekDays, setSelectedWeekDays] = useState([
     "monday",
     "tuesday",
@@ -18,9 +30,15 @@ export default function SignUp() {
     "thursday",
     "friday",
   ]);
-  const [selectedPaymentCycle, setSelectedPaymentCycle] = useState("weekly");
+  const [selectedPaymentCycle, setSelectedPaymentCycle] = useState("monthly");
   const [selectedMealPreference, setSelectedMealPreference] =
     useState("balanced");
+
+  // Validation states
+  const [mealTimeError, setMealTimeError] = useState("");
+  const [weekDayError, setWeekDayError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const mealPreferences = [
     {
@@ -62,10 +80,10 @@ export default function SignUp() {
   ];
 
   const mealTimes = [
-    { id: "breakfast", name: "Breakfast" },
-    { id: "lunch", name: "Lunch" },
-    { id: "dinner", name: "Dinner" },
-    { id: "snack", name: "Snack" },
+    { id: "breakfast", name: "Breakfast", dailyPrice: 20 },
+    { id: "lunch", name: "Lunch", dailyPrice: 30 },
+    { id: "dinner", name: "Dinner", dailyPrice: 30 },
+    { id: "snack", name: "Snack", dailyPrice: 20 },
   ];
 
   const weekDays = [
@@ -79,19 +97,43 @@ export default function SignUp() {
   ];
 
   const handleMealTimeToggle = (mealId) => {
-    setSelectedMealTimes((prev) =>
-      prev.includes(mealId)
+    setSelectedMealTimes((prev) => {
+      const newSelection = prev.includes(mealId)
         ? prev.filter((id) => id !== mealId)
-        : [...prev, mealId]
-    );
+        : [...prev, mealId];
+
+      // Validate meal requirements
+      if (newSelection.length < 2) {
+        setMealTimeError("Please select at least 2 meals");
+      } else if (
+        !newSelection.includes("lunch") ||
+        !newSelection.includes("dinner")
+      ) {
+        setMealTimeError("Please select lunch and dinner");
+        console.log("Selected Meal Times", newSelection);
+      } else {
+        setMealTimeError("");
+      }
+
+      return newSelection;
+    });
   };
 
   const handleWeekDayToggle = (dayId) => {
-    setSelectedWeekDays((prev) =>
-      prev.includes(dayId)
+    setSelectedWeekDays((prev) => {
+      const newSelection = prev.includes(dayId)
         ? prev.filter((id) => id !== dayId)
-        : [...prev, dayId]
-    );
+        : [...prev, dayId];
+
+      // Validate minimum 5 days requirement
+      if (newSelection.length < 5) {
+        setWeekDayError("Please select at least 5 days");
+      } else {
+        setWeekDayError("");
+      }
+
+      return newSelection;
+    });
   };
 
   const paymentCycles = [
@@ -99,20 +141,17 @@ export default function SignUp() {
       id: "weekly",
       title: "Weekly",
       subtitle: "AED 53.9 Per week",
-      dailyRate: "AED 7.7/day",
     },
     {
       id: "monthly",
       title: "Monthly",
       subtitle: "AED 184.8 Per month",
-      dailyRate: "AED 6.6/day",
       popular: true,
     },
     {
       id: "quarterly",
       title: "3-Months",
       subtitle: "AED 526.68 Per quarterly",
-      dailyRate: "AED 6.27/day",
     },
   ];
 
@@ -122,7 +161,87 @@ export default function SignUp() {
 
   const handleMealPreferenceChange = (preferenceId) => {
     setSelectedMealPreference(preferenceId);
+    console.log("Meal Preference changed", preferenceId);
   };
+
+  // Calculate daily rate based on selected meals
+  const calculateDailyRate = () => {
+    return selectedMealTimes.reduce((total, mealId) => {
+      const meal = mealTimes.find(m => m.id === mealId);
+      if (!meal) return total;
+      
+      let price = meal.dailyPrice;
+      
+      // Apply price modifications based on meal preference
+      if ((selectedMealPreference === "lowcarb" || selectedMealPreference === "protein") && 
+          (mealId === "breakfast" || mealId === "snack")) {
+        price += 10;
+      }
+      
+      return total + price;
+    }, 0);
+  };
+
+  // Validation function
+  const isFormValid = () => {
+    return selectedMealTimes.length >= 2 && selectedWeekDays.length >= 5;
+  };
+
+  useEffect(() => {
+    if (selectedMealTimes.length < 2) {
+      setMealTimeError("Please select at least 2 meals");
+    } else if (
+      !selectedMealTimes.includes("lunch") ||
+      !selectedMealTimes.includes("dinner")
+    ) {
+      setMealTimeError("Please select lunch and dinner");
+    } else {
+      setMealTimeError("");
+    }
+
+    if (selectedWeekDays.length < 5) {
+      setWeekDayError("Please select at least 5 days");
+    } else {
+      setWeekDayError("");
+    }
+  }, [selectedMealTimes.length, selectedWeekDays.length]);
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!isFormValid()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const data = await apiCall("/api/user-preference", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: user.id,
+          meal_plan: selectedMealPreference,
+          meal_count: selectedMealTimes.length,
+          meals: selectedMealTimes.join(","),
+          days: selectedWeekDays,
+          payment_cycle: selectedPaymentCycle,
+        }),
+      });
+
+      window.location.href = "/dashboard";
+    } catch (error) {
+      console.error("Error saving preferences:", error);
+      setSubmitError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // useEffect(() => {
+  //   if (!isAuthenticated()) {
+  //     router.push("/auth/login");
+  //   }
+  // }, [isAuthenticated, router]);
 
   return (
     <div className={`${font.className}`}>
@@ -130,10 +249,10 @@ export default function SignUp() {
       <main className="min-h-screen mt-16">
         <div className="w-[95%] mx-auto px-1 py-8 space-y-2">
           <div className="w-1/2 max-sm:w-full">
-            <h1 className="text-[48px] max-sm:text-[32px] font-bold text-gray-900 mb-2">
+            <h1 className="text-[40px] max-sm:text-[24px] font-bold text-gray-900 mb-2">
               Customize Your Perfect Meal Plan
             </h1>
-            <h2 className="text-[32px] max-sm:text-[24px] text-gray-600 font-semibold">
+            <h2 className="text-[24px] max-sm:text-[20px] text-gray-600 font-medium">
               What kind of meals do you prefer?
             </h2>
           </div>
@@ -151,7 +270,7 @@ export default function SignUp() {
                         <div
                           key={meal.id}
                           onClick={() => handleMealPreferenceChange(meal.id)}
-                          className={`flex flex-col gap-4 relative p-8 rounded-2xl border-2 cursor-pointer transition-all duration-200 hover:shadow-md ${
+                          className={`flex flex-col gap-4 relative p-6 rounded-2xl border-2 cursor-pointer transition-all duration-200 hover:shadow-md ${
                             isSelected
                               ? "border-green-500 bg-green-50"
                               : "border-gray-200 bg-[#D5D5D5] hover:border-gray-300"
@@ -159,10 +278,10 @@ export default function SignUp() {
                         >
                           <div className="flex items-center gap-4">
                             <div className="flex flex-col gap-2">
-                              <h2 className="text-[24px] font-semibold text-gray-900 mb-2 whitespace-nowrap max-sm:text-[20px]">
+                              <h2 className="text-[18px] font-semibold text-gray-900 mb-2 whitespace-nowrap max-sm:text-[20px]">
                                 {meal.title}
                               </h2>
-                              <p className="text-[16px] text-gray-600 mb-3">
+                              <p className="text-[14px] text-gray-600 mb-3">
                                 {meal.description}
                               </p>
                             </div>
@@ -175,11 +294,11 @@ export default function SignUp() {
                           </div>
 
                           <div className="flex justify-between items-center">
-                            <button className="text-green-600 text-[16px] max-sm:text-[12px] font-medium hover:text-green-700">
+                            <button className="text-green-600 text-[14px] max-sm:text-[10px] font-medium hover:text-green-700">
                               Learn More →
                             </button>
                             <button
-                              className={`flex justify-center items-center gap-2 px-4 py-2 rounded-2xl text-[16px] max-sm:text-[12px] font-bold transition-colors ${
+                              className={`flex justify-center items-center gap-2 px-4 py-2 rounded-2xl text-[14px] max-sm:text-[10px] font-bold transition-colors ${
                                 isSelected
                                   ? "bg-green-500 text-white"
                                   : "bg-gray-200 text-[#18BD0F] hover:bg-gray-300"
@@ -188,7 +307,7 @@ export default function SignUp() {
                               {isSelected && (
                                 <div className="bg-white text-green-500 rounded-full p-1">
                                   <svg
-                                    className="w-4 h-4"
+                                    className="w-3 h-3"
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                   >
@@ -211,12 +330,17 @@ export default function SignUp() {
 
                 {/* How many meals per day? --- Section 2 */}
                 <section className="space-y-4">
-                  <h2 className="text-[32px] max-sm:text-[24px] text-gray-600">
+                  <h2 className="text-[24px] max-sm:text-[20px] text-gray-600">
                     How many meals per day?
                   </h2>
                   <p className="text-gray-500">
-                    Select a minimum of 2 meals, including lunch or dinner.
+                    Select a minimum of 2 meals, including lunch and dinner.
                   </p>
+                  {mealTimeError && (
+                    <p className="text-red-500 text-sm font-medium">
+                      {mealTimeError}
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-2 max-sm:grid-cols-1 gap-4">
                     {mealTimes.map((meal) => {
@@ -225,20 +349,20 @@ export default function SignUp() {
                         <div
                           key={meal.id}
                           onClick={() => handleMealTimeToggle(meal.id)}
-                          className={`relative p-8 rounded-4xl border-4 cursor-pointer transition-all duration-200 hover:shadow-md ${
+                          className={`relative p-4 rounded-2xl border-4 cursor-pointer transition-all duration-200 hover:shadow-md ${
                             isSelected
                               ? "border-green-500 bg-green-50"
                               : "border-gray-200 bg-gray-100 hover:border-gray-300"
                           }`}
                         >
                           <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-gray-900 text-[24px] max-sm:text-[16px]">
+                            <h3 className="font-semibold text-gray-900 text-[18px] max-sm:text-[14px]">
                               {meal.name}
                             </h3>
                             {isSelected ? (
                               <div className="bg-green-500 text-white rounded-full p-1">
                                 <svg
-                                  className="w-4 h-4"
+                                  className="w-3 h-3"
                                   fill="currentColor"
                                   viewBox="0 0 20 20"
                                 >
@@ -261,19 +385,24 @@ export default function SignUp() {
 
                 {/* How many days a week? --- Section 3 */}
                 <section className="space-y-4">
-                  <h2 className="text-[32px] max-sm:text-[24px] text-gray-600">
+                  <h2 className="text-[24px] max-sm:text-[20px] text-gray-600">
                     How many days a week are you eating?
                   </h2>
                   <p className="text-gray-500">Select a minimum of 5 days</p>
+                  {weekDayError && (
+                    <p className="text-red-500 text-sm font-medium">
+                      {weekDayError}
+                    </p>
+                  )}
 
-                  <div className="grid grid-cols-7 max-sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-7 max-sm:grid-cols-3">
                     {weekDays.map((day) => {
                       const isSelected = selectedWeekDays.includes(day.id);
                       return (
                         <div
                           key={day.id}
                           onClick={() => handleWeekDayToggle(day.id)}
-                          className={`w-16 h-16 rounded-full flex items-center justify-center cursor-pointer font-bold text-lg transition-all duration-200 ${
+                          className={`w-14 h-14 rounded-full flex items-center justify-center cursor-pointer font-bold text-lg transition-all duration-200 ${
                             isSelected
                               ? "bg-green-500 text-white"
                               : "bg-gray-300 text-gray-600 hover:bg-gray-400"
@@ -289,7 +418,7 @@ export default function SignUp() {
 
                 {/* Payment Cycle --- Section 4 */}
                 <section className="space-y-4">
-                  <h2 className="text-[32px] max-sm:text-[24px] text-gray-600">
+                  <h2 className="text-[24px] max-sm:text-[20px] text-gray-600">
                     Payment Cycle
                   </h2>
 
@@ -309,7 +438,7 @@ export default function SignUp() {
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
-                                <h3 className="font-bold text-gray-900 text-[20px] max-sm:text-[12px]">
+                                <h3 className="font-bold text-gray-900 text-[18px] max-sm:text-[12px]">
                                   {cycle.title}
                                 </h3>
                                 {cycle.popular && (
@@ -324,12 +453,15 @@ export default function SignUp() {
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="text-right">
-                                <div className="font-bold text-gray-900 text-[20px] max-sm:text-[12px]">
-                                  {cycle.dailyRate}
+                                <div className="font-bold text-gray-900 text-[18px] max-sm:text-[12px]">
+                                  ${calculateDailyRate()}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  per day
                                 </div>
                               </div>
                               <div
-                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                                   isSelected
                                     ? "border-green-500 bg-green-500"
                                     : "border-gray-400 bg-white"
@@ -354,19 +486,22 @@ export default function SignUp() {
               <div className="bg-green-50 rounded-lg py-4 shadow-sm sticky top-8 px-6 space-y-6">
                 <div className="rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-[36px] max-sm:text-[24px] max-sm:text-center text-gray-600 font-bold">
+                    <h2 className="text-[30px] max-sm:text-[20px] max-sm:text-center text-gray-600 font-bold">
                       Your Package, <br /> Your Way.
                     </h2>
                     <Image
                       src="/images/sign-up/cart.png"
                       alt="Cart"
-                      width={100}
-                      height={100}
+                      width={80}
+                      height={80}
                     />
                   </div>
 
-                  <div className="text-[24px] max-sm:text-[16px] text-green-600 font-semibold mb-1">
-                    Balanced, 2 Meals, 7 days per week
+                  <div className="text-[20px] max-sm:text-[14px] text-green-600 font-semibold mb-1">
+                    {selectedMealPreference.charAt(0).toUpperCase() +
+                      selectedMealPreference.slice(1)}
+                    , {selectedMealTimes.length} Meals,{" "}
+                    {selectedWeekDays.length} days per week
                   </div>
                 </div>
 
@@ -375,49 +510,66 @@ export default function SignUp() {
                   <input
                     type="text"
                     placeholder="Add promotion code"
-                    className="flex-1 px-3 py-4 bg-white border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    className="flex-1 px-3 py-3 bg-white border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   />
-                  <button className="px-12 py-4 text-gray-600 border border-gray-300 rounded-full hover:bg-gray-50">
+                  <button className="px-12 py-3 text-gray-600 border border-gray-300 rounded-full hover:bg-gray-50">
                     Apply
                   </button>
                 </div>
 
                 {/* Payment Summary */}
                 <div>
-                  <h3 className="text-[32px] max-sm:text-[24px] font-semibold text-gray-500 mb-4">
+                  <h3 className="text-[24px] max-sm:text-[16px] font-semibold text-gray-500 mb-4">
                     Payment Summary
                   </h3>
 
                   <div className="space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-gray-500 text-[20px] max-sm:text-[16px]">
+                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
                         Plan Price
                       </span>
                       <span className="font-medium">AED 48</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500 text-[20px] max-sm:text-[16px]">
+                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
                         Delivery Fee
                       </span>
                       <span className="font-medium">AED 1</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500 text-[20px] max-sm:text-[16px]">
+                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
                         VAT (10%)
                       </span>
                       <span className="font-medium">AED 4.9</span>
                     </div>
                     <hr className="border-gray-200" />
-                    <div className="flex justify-between text-lg max-sm:text-[16px] font-semibold">
+                    <div className="flex justify-between text-lg max-sm:text-[14px] font-semibold">
                       <span>TOTAL</span>
                       <span>AED 53.9</span>
                     </div>
                   </div>
                 </div>
 
+                {/* Submit Error */}
+                {submitError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-600 text-sm font-medium">
+                      {submitError}
+                    </p>
+                  </div>
+                )}
+
                 {/* Continue Button */}
-                <button className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors">
-                  Continue
+                <button
+                  onClick={handleSubmit}
+                  disabled={!isFormValid() || isSubmitting}
+                  className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors ${
+                    isFormValid() && !isSubmitting
+                      ? "bg-green-500 hover:bg-green-600 text-white cursor-pointer"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  {isSubmitting ? "Saving..." : "Continue"}
                 </button>
               </div>
             </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useAuth } from "../contexts/AuthContext";
 
 const MAIN = "#18BD0F"; // main color
 
@@ -12,6 +13,7 @@ export default function Header() {
   const [showBanner, setShowBanner] = useState(true);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const nav = [
     { href: "/", label: "Home" },
@@ -24,7 +26,7 @@ export default function Header() {
     href === "/" ? pathname === "/" : pathname?.startsWith(href);
 
   return (
-    <div className="relative">
+    <div className="relative z-50">
       {/* Top Offer Banner */}
       {showBanner && (
         <div
@@ -71,8 +73,8 @@ export default function Header() {
                   className={[
                     "px-3 py-2 rounded-full transition",
                     isActive(item.href)
-                      ? "bg-white/10 border border-white/15"
-                      : "hover:bg-white/10",
+                      ? "text-[#18BD0F]"
+                      : "hover:text-[#18BD0F]/80",
                   ].join(" ")}
                 >
                   {item.label}
@@ -81,24 +83,38 @@ export default function Header() {
             ))}
           </ul>
 
-          {/* Right: Login/Signup (desktop) */}
+          {/* Right: Login/Signup or User Menu (desktop) */}
           <div className="hidden md:flex items-center">
-            <Link
-              href="/auth/login"
-              className="inline-flex items-center gap-2 rounded-full px-5 py-2 font-medium text-white shadow-sm transition"
-              style={{ backgroundColor: MAIN }}
-            >
-              Login/Signup
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <path
-                  d="M5 12h14M13 5l7 7-7 7"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </Link>
+            {isAuthenticated() ? (
+              <div className="flex items-center gap-3">
+                <span className="text-gray-700 font-medium">
+                  Welcome, {user?.user_metadata?.full_name || 'User'}!
+                </span>
+                <button
+                  onClick={logout}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 shadow-sm transition"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="inline-flex items-center gap-2 rounded-full px-5 py-2 font-medium text-white shadow-sm transition"
+                style={{ backgroundColor: MAIN }}
+              >
+                Login/Signup
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M5 12h14M13 5l7 7-7 7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </Link>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -177,8 +193,8 @@ export default function Header() {
                   className={[
                     "block px-4 py-3 rounded-lg text-white",
                     isActive(item.href)
-                      ? "bg-white/10 border border-white/10"
-                      : "hover:bg-white/10",
+                      ? "text-[#18BD0F]"
+                      : "hover:text-[#18BD0F]/80",
                   ].join(" ")}
                 >
                   {item.label}
@@ -186,14 +202,31 @@ export default function Header() {
               </li>
             ))}
             <li className="pt-1">
-              <Link
-                href="/auth/login"
-                onClick={() => setOpen(false)}
-                className="block text-center rounded-lg px-4 py-3 font-medium text-white"
-                style={{ backgroundColor: MAIN }}
-              >
-                Login/Signup
-              </Link>
+              {isAuthenticated() ? (
+                <div className="space-y-2">
+                  <div className="text-center text-gray-700 font-medium py-2">
+                    Welcome, {user?.user_metadata?.full_name || 'User'}!
+                  </div>
+                  <button
+                    onClick={() => {
+                      logout();
+                      setOpen(false);
+                    }}
+                    className="block w-full text-center rounded-lg px-4 py-3 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  onClick={() => setOpen(false)}
+                  className="block text-center rounded-lg px-4 py-3 font-medium text-white"
+                  style={{ backgroundColor: MAIN }}
+                >
+                  Login/Signup
+                </Link>
+              )}
             </li>
           </ul>
         </div>

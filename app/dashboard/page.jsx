@@ -5,28 +5,86 @@ import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+
+import Typography from '@mui/joy/Typography';
+import CircularProgress from '@mui/joy/CircularProgress';
+import { useCountUp } from 'use-count-up';
+
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { PieChart } from "@mui/x-charts/PieChart";
-import { LineChart } from "@mui/x-charts/LineChart";
+
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js';
+import { Line } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+);
+
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DateCalendar } from "@mui/x-date-pickers/DateCalendar";
+
 import Carousel from "react-multi-carousel";
 import "react-multi-carousel/lib/styles.css";
+import dayjs from "dayjs";
+
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import Image from "next/image";
-import dayjs from "dayjs";
+
+import { useAuth } from "../contexts/AuthContext";
+import { useRouter } from "next/navigation";
 
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [currentMealIndex, setCurrentMealIndex] = useState(0);
+  const [screenWidth, setScreenWidth] = useState(0);
 
-  // Define meals array first
+  const { user, isAuthenticated, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticated()) {
+      router.push("/auth/login");
+    }
+  }, [isAuthenticated, router]);
+
+  const calculateLeftPosition = (baseLeft, screenWidth) => {
+    const referenceWidth = 1326; 
+    const scaleFactor = screenWidth / referenceWidth;
+    return Math.round(baseLeft * scaleFactor);
+  };
+
+  useEffect(() => {
+    const updateScreenWidth = () => {
+      setScreenWidth(window.innerWidth);
+    };
+
+    updateScreenWidth();
+    window.addEventListener('resize', updateScreenWidth);
+    return () => window.removeEventListener('resize', updateScreenWidth);
+  }, []);
+
   const meals = [
     {
       id: "breakfast",
@@ -54,16 +112,57 @@ export default function Dashboard() {
     },
   ];
 
-  // Statistics data
-  const statisticsData = [
-    { id: 0, value: 81, label: "Total Kcal", color: "#22c55e" },
-    { id: 1, value: 22, label: "Protein", color: "#f97316" },
-    { id: 2, value: 53, label: "Carbs", color: "#3b82f6" },
-    { id: 3, value: 22, label: "Fats", color: "#eab308" },
-    { id: 4, value: 52, label: "Fiber", color: "#6b7280" },
-  ];
+  const CircularProgressChart = ({ targetValue, color, trackColor = '#f0f0f0', label, size = 'lg' }) => {
+    const { value } = useCountUp({
+      isCounting: true,
+      duration: 2,
+      start: 0,
+      end: targetValue,
+    });
 
-  // Weekly count data
+    const progressSize = size === 'lg' ? 140 : 80;
+    const thickness = size === 'lg' ? 12 : 8;
+
+    return (
+      <div className="flex flex-col items-center">
+        <div className="relative" style={{ width: progressSize, height: progressSize }}>
+          <CircularProgress 
+            determinate 
+            value={value}
+            sx={{
+              width: progressSize,
+              height: progressSize,
+              '--CircularProgress-size': `${progressSize}px`,
+              '--CircularProgress-thickness': `${thickness}px`,
+              '--CircularProgress-progressColor': color,
+              '--CircularProgress-trackColor': trackColor,
+            }}
+          >
+            <Typography 
+              level={size === 'lg' ? 'h3' : 'body-lg'}
+              sx={{ 
+                fontWeight: 600,
+                color: '#374151'
+              }}
+            >
+              {Math.round(value)}%
+            </Typography>
+          </CircularProgress>
+        </div>
+        <Typography 
+          level={size === 'lg' ? 'body-md' : 'body-sm'}
+          sx={{ 
+            mt: size === 'lg' ? 2 : 1,
+            color: '#6b7280',
+            fontWeight: 500
+          }}
+        >
+          {label}
+        </Typography>
+      </div>
+    );
+  };
+
   const weeklyData = [
     { day: "MON", value: 450 },
     { day: "TUE", value: 520 },
@@ -74,7 +173,60 @@ export default function Dashboard() {
     { day: "SUN", value: 590 },
   ];
 
-  // Meal plan data for carousel
+  const chartData = {
+    labels: weeklyData.map(item => item.day),
+    datasets: [{
+      label: 'Weekly Count',
+      data: weeklyData.map(item => item.value),
+      fill: true,
+      borderColor: 'rgb(34, 197, 94)',
+      backgroundColor: 'rgba(34, 197, 94, 0.1)',
+      tension: 0.4,
+      pointBackgroundColor: 'rgb(34, 197, 94)',
+      pointBorderColor: 'rgb(34, 197, 94)',
+      pointRadius: 4,
+      pointHoverRadius: 6,
+    }]
+  };
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        mode: 'index',
+        intersect: false,
+      },
+    },
+    scales: {
+      x: {
+        display: false,
+        grid: {
+          display: false,
+        },
+      },
+      y: {
+        display: false,
+        grid: {
+          display: false,
+        },
+      },
+    },
+    elements: {
+      line: {
+        borderWidth: 2,
+      },
+    },
+    interaction: {
+      mode: 'nearest',
+      axis: 'x',
+      intersect: false,
+    },
+  };
+
   const mealPlanData = [
     {
       id: 1,
@@ -141,7 +293,6 @@ export default function Dashboard() {
     },
   ];
 
-  // Carousel responsive config
   const responsive = {
     desktop: {
       breakpoint: { max: 3000, min: 1024 },
@@ -168,12 +319,10 @@ export default function Dashboard() {
   const floatingItem2Ref = useRef(null);
   const floatingItem3Ref = useRef(null);
 
-  // Initialize mainImageRefs with refs for each meal
   const mainImageRefs = useRef(meals.map(() => ({ current: null })));
 
   useEffect(() => {
     const ctx = gsap.context(() => {
-      // Initial setup (no animation yet)
       gsap.set([titleRef.current, priceRef.current, descriptionRef.current], {
         opacity: 0,
         y: 30,
@@ -186,13 +335,11 @@ export default function Dashboard() {
       if (descriptionRef.current)
         descriptionRef.current.textContent = meals[0].description;
 
-      // Create ScrollTrigger for the entire section
       ScrollTrigger.create({
         trigger: containerRef.current,
-        start: "top 80%", // Trigger when 80% of the section is in view
-        end: "bottom 20%", // End when 20% is left in view
+        start: "top 80%", 
+        end: "bottom 20%", 
         onEnter: () => {
-          // Animate all elements when entering the section
           gsap.fromTo(
             [titleRef.current, priceRef.current, descriptionRef.current],
             { opacity: 0, y: 30 },
@@ -205,7 +352,6 @@ export default function Dashboard() {
           );
         },
         onLeaveBack: () => {
-          // Reset animations when leaving back up
           gsap.set(
             [titleRef.current, priceRef.current, descriptionRef.current],
             { opacity: 0, y: 30 }
@@ -216,14 +362,12 @@ export default function Dashboard() {
         },
       });
 
-      // Individual meal transitions based on scroll position
       meals.forEach((meal, index) => {
         ScrollTrigger.create({
           trigger: containerRef.current,
           start: `${(index / meals.length) * 100}% top`,
           end: `${((index + 1) / meals.length) * 100}% top`,
           onEnter: () => {
-            // Animate text elements with smooth transition
             gsap.fromTo(
               [titleRef.current, priceRef.current, descriptionRef.current],
               { opacity: 0, y: 30 },
@@ -243,7 +387,6 @@ export default function Dashboard() {
                 },
               }
             );
-            // Fade out all images except current
             mainImageRefs.current.forEach((ref, i) => {
               if (i !== index) {
                 gsap.to(ref.current, {
@@ -254,7 +397,6 @@ export default function Dashboard() {
                 });
               }
             });
-            // Fade in current image
             gsap.fromTo(
               mainImageRefs.current[index].current,
               { opacity: 0, x: 300 },
@@ -262,7 +404,6 @@ export default function Dashboard() {
             );
           },
           onLeave: () => {
-            // Prepare for next image
             if (index < meals.length - 1) {
               gsap.set(mainImageRefs.current[index + 1].current, {
                 opacity: 0,
@@ -271,7 +412,6 @@ export default function Dashboard() {
             }
           },
           onEnterBack: () => {
-            // Animate text elements with smooth transition
             gsap.fromTo(
               [titleRef.current, priceRef.current, descriptionRef.current],
               { opacity: 0, y: 30 },
@@ -291,7 +431,6 @@ export default function Dashboard() {
                 },
               }
             );
-            // Fade out all images except current
             mainImageRefs.current.forEach((ref, i) => {
               if (i !== index) {
                 gsap.to(ref.current, {
@@ -302,7 +441,6 @@ export default function Dashboard() {
                 });
               }
             });
-            // Fade in current image
             gsap.fromTo(
               mainImageRefs.current[index].current,
               { opacity: 0, x: 300 },
@@ -312,7 +450,6 @@ export default function Dashboard() {
         });
       });
 
-      // Floating items: cycle positions with rotation
       const floatingRefs = [
         floatingItem1Ref,
         floatingItem2Ref,
@@ -330,25 +467,25 @@ export default function Dashboard() {
             const centerY = 200;
             const baseAngle = (index / meals.length) * 360 + progress * 120;
 
-            floatingRefs.forEach((ref, i) => {
-              const angle = baseAngle + i * 120;
-              const x = centerX + Math.cos((angle * Math.PI) / 180) * radius;
-              const y = centerY + Math.sin((angle * Math.PI) / 180) * radius;
-              const xAdj = x - (i === 0 ? 48 : i === 1 ? 0 : 32);
-              const yAdj = y - (i === 0 ? 16 : i === 1 ? 144 : 320);
+            // floatingRefs.forEach((ref, i) => {
+            //   const angle = baseAngle + i * 120;
+            //   const x = centerX + Math.cos((angle * Math.PI) / 180) * radius;
+            //   const y = centerY + Math.sin((angle * Math.PI) / 180) * radius;
+            //   // Adjusted for new positions: top-right, middle-left, bottom-left
+            //   const xAdj = x - (i === 0 ? 320 : i === 1 ? -32 : 16);
+            //   const yAdj = y - (i === 0 ? 32 : i === 1 ? 200 : 320);
 
-              gsap.set(ref.current, {
-                x: xAdj,
-                y: yAdj,
-                rotation: progress * 360,
-                scale: 0.9,
-              });
-            });
+            //   gsap.set(ref.current, {
+            //     x: xAdj,
+            //     y: yAdj,
+            //     rotation: progress * 360,
+            //     scale: 0.9,
+            //   });
+            // });
           },
         });
       });
 
-      // Ensure initial state is set
       ScrollTrigger.refresh();
     }, containerRef);
 
@@ -360,12 +497,13 @@ export default function Dashboard() {
       <Header />
       <main className="bg-white">
         {/* Fixed Section Container */}
-        <div ref={containerRef} className="h-[300vh] relative">
+        <div ref={containerRef} className="mt-25 h-[300vh] relative">
+          {/* <h1 className="text-4xl font-bold text-gray-900 mb-4 px-10">Hello {user?.user_metadata?.full_name || 'User'}!</h1> */}
           <div className="sticky top-0 h-screen flex items-center">
-            <div className="container mx-auto px-4">
+            <div className="min-h-screen overflow-hidden flex justify-center 2xl:justify-between 2xl:w-full mx-auto">
               <div className="flex items-center gap-16">
                 {/* Content Side */}
-                <div className="w-1/2">
+                <div className="w-1/2 ml-10">
                   <h1
                     ref={titleRef}
                     className="text-4xl font-bold text-gray-900 mb-4"
@@ -390,29 +528,29 @@ export default function Dashboard() {
                 </div>
 
                 {/* Image Side with Decorative Elements */}
-                <div className="w-1/2 relative">
+                <div className="w-1/2 relative -right-10">
                   {/* Large Green Circle Background */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-96 h-96 bg-green-100 rounded-full opacity-80"></div>
+                  <div className="absolute inset-0 -right-50 flex items-center justify-center">
+                    <div className="w-[650px] h-[650px] max-xl:w-[550px] max-xl:h-[550px] bg-green-100 rounded-full opacity-80"></div>
                   </div>
 
                   {/* Dotted Circle Path */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-[500px] h-[500px] border-2 border-dashed border-gray-300 rounded-full"></div>
+                  <div className="absolute inset-0 -right-120 flex items-center justify-center">
+                    <div className="w-[1100px] h-[800px] max-xl:w-[1000px] max-xl:h-[700px] border-2 border-dashed border-gray-500 rounded-full"></div>
                   </div>
 
                   {/* Main Food Images (stacked) */}
-                  <div className="relative z-10 flex items-center justify-center h-96">
-                    <div className="relative w-[300px] h-[300px]">
+                  <div className="relative -right-15 z-10 flex items-center justify-center h-100">
+                    <div className="relative w-[550px] h-[550px] max-xl:w-[450px] max-xl:h-[450px]">
                       {meals.map((meal, index) => (
                         <Image
                           key={index}
                           ref={mainImageRefs.current[index]}
                           src={meal.image}
                           alt={meal.title}
-                          width={300}
-                          height={300}
-                          className="absolute top-0 left-0 rounded-full shadow-lg"
+                          width={550}
+                          height={550}
+                          className="absolute rounded-full shadow-lg"
                         />
                       ))}
                     </div>
@@ -421,14 +559,17 @@ export default function Dashboard() {
                   {/* Floating Food Items */}
                   <div
                     ref={floatingItem1Ref}
-                    className="absolute top-4 left-12 z-20"
+                    className="absolute -top-10 z-20"
+                    style={{ 
+                      left: `${calculateLeftPosition(0, screenWidth)}px` // Base left: 40px for left-10
+                    }}
                   >
-                    <div className="w-20 h-20 bg-white rounded-full shadow-lg flex items-center justify-center">
+                    <div className="w-28 h-28 max-xl:w-20 max-xl:h-20 bg-white rounded-full shadow-lg flex items-center justify-center">
                       <Image
                         src="/images/dashboard/breakfast.png"
                         alt="Food item"
-                        width={60}
-                        height={60}
+                        width={100}
+                        height={100}
                         className="rounded-full"
                       />
                     </div>
@@ -436,14 +577,17 @@ export default function Dashboard() {
 
                   <div
                     ref={floatingItem2Ref}
-                    className="absolute top-36 left-0 z-20"
+                    className="absolute top-40 z-20"
+                    style={{ 
+                      left: `${calculateLeftPosition(-40, screenWidth)}px` // Base left: 0px
+                    }}
                   >
-                    <div className="w-24 h-24 bg-white rounded-full shadow-lg flex items-center justify-center">
+                    <div className="w-28 h-28 max-xl:w-20 max-xl:h-20 bg-white rounded-full shadow-lg flex items-center justify-center">
                       <Image
                         src="/images/dashboard/lunch.png"
                         alt="Food item"
-                        width={70}
-                        height={70}
+                        width={100}
+                        height={100}
                         className="rounded-full"
                       />
                     </div>
@@ -451,14 +595,17 @@ export default function Dashboard() {
 
                   <div
                     ref={floatingItem3Ref}
-                    className="absolute bottom-4 left-8 z-20"
+                    className="absolute -bottom-20 z-20"
+                    style={{ 
+                      left: `${calculateLeftPosition(0, screenWidth)}px` // Base left: 60px for left-15
+                    }}
                   >
-                    <div className="w-20 h-20 bg-white rounded-full shadow-lg flex items-center justify-center">
+                    <div className="w-28 h-28 max-xl:w-20 max-xl:h-20 bg-white rounded-full shadow-lg flex items-center justify-center">
                       <Image
                         src="/images/dashboard/dinner.png"
                         alt="Food item"
-                        width={60}
-                        height={60}
+                        width={100}
+                        height={100}
                         className="rounded-full"
                       />
                     </div>
@@ -475,7 +622,7 @@ export default function Dashboard() {
             {/* Your Statistics Section */}
             <div>
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-gray-500">
                   Your Statistics
                 </h2>
                 <button className="text-gray-400 hover:text-gray-600">
@@ -490,123 +637,57 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                {/* Main Pie Chart */}
-                <div className="col-span-2 lg:col-span-1 flex flex-col items-center">
-                  <PieChart
-                    series={[
-                      {
-                        data: [
-                          {
-                            id: 0,
-                            value: 81,
-                            label: "Total",
-                            color: "#22c55e",
-                          },
-                        ],
-                        innerRadius: 60,
-                        outerRadius: 80,
-                      },
-                    ]}
-                    width={200}
-                    height={200}
-                    slotProps={{
-                      legend: { hidden: true },
-                    }}
+                {/* Main Circular Progress Chart */}
+                <div className="col-span-2 lg:col-span-1 flex flex-col items-center justify-center p-6">
+                  <CircularProgressChart 
+                    targetValue={81} 
+                    color="#10b981" 
+                    trackColor="#dcfce7"
+                    label="Total Kcal" 
+                    size="lg"
                   />
-                  <div className="text-center mt-2">
-                    <p className="text-2xl font-bold text-gray-900">81%</p>
-                    <p className="text-sm text-gray-600">Total Kcal</p>
-                  </div>
                 </div>
 
-                {/* Small Charts */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="text-center">
-                    <PieChart
-                      series={[
-                        {
-                          data: [
-                            { id: 0, value: 22, color: "#f97316" },
-                            { id: 1, value: 78, color: "#e5e7eb" },
-                          ],
-                          innerRadius: 25,
-                          outerRadius: 35,
-                        },
-                      ]}
-                      width={100}
-                      height={100}
-                      slotProps={{
-                        legend: { hidden: true },
-                      }}
+                {/* Small Circular Progress Charts */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col items-center justify-center p-3">
+                    <CircularProgressChart 
+                      targetValue={22} 
+                      color="#f97316" 
+                      trackColor="#fed7aa"
+                      label="Protein" 
+                      size="sm"
                     />
-                    <p className="text-xs text-gray-600 mt-1">Protein</p>
-                    <p className="text-sm font-bold">22%</p>
                   </div>
 
-                  <div className="text-center">
-                    <PieChart
-                      series={[
-                        {
-                          data: [
-                            { id: 0, value: 53, color: "#3b82f6" },
-                            { id: 1, value: 47, color: "#e5e7eb" },
-                          ],
-                          innerRadius: 25,
-                          outerRadius: 35,
-                        },
-                      ]}
-                      width={100}
-                      height={100}
-                      slotProps={{
-                        legend: { hidden: true },
-                      }}
+                  <div className="flex flex-col items-center justify-center p-3">
+                    <CircularProgressChart 
+                      targetValue={62} 
+                      color="#60a5fa" 
+                      trackColor="#dbeafe"
+                      label="Carbs" 
+                      size="sm"
                     />
-                    <p className="text-xs text-gray-600 mt-1">Carbs</p>
-                    <p className="text-sm font-bold">53%</p>
                   </div>
 
-                  <div className="text-center">
-                    <PieChart
-                      series={[
-                        {
-                          data: [
-                            { id: 0, value: 22, color: "#eab308" },
-                            { id: 1, value: 78, color: "#e5e7eb" },
-                          ],
-                          innerRadius: 25,
-                          outerRadius: 35,
-                        },
-                      ]}
-                      width={100}
-                      height={100}
-                      slotProps={{
-                        legend: { hidden: true },
-                      }}
+                  <div className="flex flex-col items-center justify-center p-3">
+                    <CircularProgressChart 
+                      targetValue={22} 
+                      color="#fbbf24" 
+                      trackColor="#fef3c7"
+                      label="Fats" 
+                      size="sm"
                     />
-                    <p className="text-xs text-gray-600 mt-1">Fats</p>
-                    <p className="text-sm font-bold">22%</p>
                   </div>
 
-                  <div className="text-center">
-                    <PieChart
-                      series={[
-                        {
-                          data: [
-                            { id: 0, value: 52, color: "#6b7280" },
-                            { id: 1, value: 48, color: "#e5e7eb" },
-                          ],
-                          innerRadius: 25,
-                          outerRadius: 35,
-                        },
-                      ]}
-                      width={100}
-                      height={100}
-                      slotProps={{
-                        legend: { hidden: true },
-                      }}
+                  <div className="flex flex-col items-center justify-center p-3">
+                    <CircularProgressChart 
+                      targetValue={62} 
+                      color="#9ca3af" 
+                      trackColor="#f3f4f6"
+                      label="Fiber" 
+                      size="sm"
                     />
-                    <p className="text-xs text-gray-600 mt-1">Fiber</p>
-                    <p className="text-sm font-bold">52%</p>
                   </div>
                 </div>
               </div>
@@ -615,7 +696,7 @@ export default function Dashboard() {
             {/* Your Weekly Count Section */}
             <div>
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-gray-500">
                   Your Weekly Count
                 </h2>
                 <select className="text-sm border border-gray-300 rounded-lg px-3 py-1">
@@ -632,39 +713,12 @@ export default function Dashboard() {
                 </div>
               </div>
 
-                              <LineChart
-                  width={400}
-                  height={200}
-                  series={[
-                    {
-                      data: weeklyData.map((item) => item.value),
-                      area: true,
-                      color: "#22c55e",
-                    },
-                  ]}
-                  xAxis={[{
-                    scaleType: 'point',
-                    data: weeklyData.map(item => item.day),
-                    hideTooltip: true,
-                    tickLabelStyle: { display: 'none' },
-                    axisLine: false,
-                    tickLine: false,
-                  }]}
-                  yAxis={[{
-                    hideTooltip: true,
-                    tickLabelStyle: { display: 'none' },
-                    axisLine: false,
-                    tickLine: false,
-                    grid: false,
-                  }]}
-                  margin={{ left: 0, right: 0, top: 20, bottom: 0 }}
-                />
+              <div style={{ width: '100%', height: '200px' }}>
+                <Line data={chartData} options={chartOptions} />
+              </div>
 
               <div className="mt-4 text-center">
                 <p className="text-lg font-bold text-gray-900">659 Kcal</p>
-                <p className="text-xs text-gray-600">
-                  Turn system flow off track competitive city
-                </p>
               </div>
             </div>
           </div>
@@ -728,8 +782,6 @@ export default function Dashboard() {
                 responsive={responsive}
                 additionalTransfrom={0}
                 arrows
-                autoPlay
-                autoPlaySpeed={3000}
                 centerMode={false}
                 containerClass="container-with-dots"
                 draggable
@@ -755,19 +807,6 @@ export default function Dashboard() {
                         fill
                         className="object-cover"
                       />
-                      <button className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-sm">
-                        <svg
-                          className="w-4 h-4 text-gray-600"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </button>
                     </div>
                     <div className="p-3">
                       <h3 className="font-medium text-gray-900 text-sm mb-1">
