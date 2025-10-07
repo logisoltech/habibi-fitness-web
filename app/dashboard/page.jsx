@@ -7,6 +7,7 @@ import "@fontsource/roboto/700.css";
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 
 import Typography from '@mui/joy/Typography';
 import CircularProgress from '@mui/joy/CircularProgress';
@@ -51,23 +52,98 @@ import Header from "../components/Header";
 import Footer from "../components/Footer";
 
 import { useAuth } from "../contexts/AuthContext";
+import { useUserData } from "../contexts/UserDataContext";
 import { useRouter } from "next/navigation";
+import ApiService from "../services/api";
 
 gsap.registerPlugin(ScrollTrigger);
+
+// Circular Progress Component from Home Page
+const HomeCircularProgress = ({ value, max = 100, size = 120, strokeWidth = 8, color = "#07da63", trackColor = "#e5e7eb", children }) => {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDasharray = circumference;
+  const strokeDashoffset = circumference - (value / max) * circumference;
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg
+        className="transform -rotate-90"
+        width={size}
+        height={size}
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={trackColor}
+          strokeWidth={strokeWidth}
+          fill="transparent"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="transparent"
+          strokeDasharray={strokeDasharray}
+          strokeDashoffset={strokeDashoffset}
+          strokeLinecap="round"
+          className="transition-all duration-300 ease-in-out"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {children}
+      </div>
+    </div>
+  );
+};
 
 export default function Dashboard() {
   const [selectedDate, setSelectedDate] = useState(dayjs());
   const [currentMealIndex, setCurrentMealIndex] = useState(0);
   const [screenWidth, setScreenWidth] = useState(0);
+  const [meals, setMeals] = useState({});
+  const [mealsLoading, setMealsLoading] = useState(true);
+  const [macroData, setMacroData] = useState({
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fats: 0,
+    fiber: 0
+  });
 
   const { user, isAuthenticated, logout } = useAuth();
+  const { userData, loadUserData, getBMIInfo, updateWeight } = useUserData();
   const router = useRouter();
 
-  useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/auth/login");
-    }
-  }, [isAuthenticated, router]);
+  // Weight Tracker state
+  const [showWeightModal, setShowWeightModal] = useState(false);
+  const [newWeight, setNewWeight] = useState('');
+  const [updatingWeight, setUpdatingWeight] = useState(false);
+
+  const { bmi: currentBMI, color: bmiColor } = getBMIInfo();
+
+  // Calculate total macros from macroData
+  const calculateTotalMacros = () => {
+    return {
+      calories: macroData.calories || 0,
+      protein: macroData.protein || 0,
+      carbs: macroData.carbs || 0,
+      fats: macroData.fats || 0,
+      fiber: macroData.fiber || 0
+    };
+  };
+
+  const macroTotals = calculateTotalMacros();
+  const totalCalories = macroTotals.calories;
+
+  // useEffect(() => {
+  //   if (!isAuthenticated()) {
+  //     router.push("/auth/login");
+  //   }
+  // }, [isAuthenticated, router]);
 
   const calculateLeftPosition = (baseLeft, screenWidth) => {
     const referenceWidth = 1326; 
@@ -85,7 +161,153 @@ export default function Dashboard() {
     return () => window.removeEventListener('resize', updateScreenWidth);
   }, []);
 
-  const meals = [
+  // Load user data and calculate macros
+  useEffect(() => {
+    const loadUserDataAndCalculateMacros = async () => {
+      try {
+        // Check if we're on the client side to avoid hydration issues
+        if (typeof window === 'undefined') return;
+        
+        const storedUserData = localStorage.getItem('user_data');
+        if (storedUserData) {
+          const parsedUserData = JSON.parse(storedUserData);
+          loadUserData(parsedUserData);
+          
+          // Fetch meal schedule to calculate macros
+          const userId = parsedUserData?.userId || parsedUserData?.id;
+          if (userId) {
+            try {
+              let result = await ApiService.getMealSchedule(userId);
+              if (!result.success) {
+                result = await ApiService.generateMealSchedule(userId, 4);
+              }
+              
+              if (result.success && result.data?.weeks?.[0]) {
+                const currentWeek = result.data.weeks[0];
+                const allWeekDays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+                const dayMapping = {
+                  'MON': 'monday',
+                  'TUE': 'tuesday', 
+                  'WED': 'wednesday',
+                  'THU': 'thursday',
+                  'FRI': 'friday',
+                  'SAT': 'saturday',
+                  'SUN': 'sunday'
+                };
+                
+                const today = new Date().getDay();
+                const todayKey = today === 0 ? 'sunday' : 
+                                today === 1 ? 'monday' : 
+                                today === 2 ? 'tuesday' : 
+                                today === 3 ? 'wednesday' : 
+                                today === 4 ? 'thursday' : 
+                                today === 5 ? 'friday' : 'saturday';
+                
+                const todayMeals = currentWeek.days[todayKey] || {};
+                
+                // Calculate totals for today
+                let totals = { calories: 0, protein: 0, carbs: 0, fats: 0, fiber: 0 };
+                Object.values(todayMeals).forEach(meal => {
+                  if (meal) {
+                    totals.calories += parseInt(meal.calories) || 0;
+                    totals.protein += parseFloat(meal.protein) || 0;
+                    totals.carbs += parseFloat(meal.carbs) || 0;
+                    totals.fats += parseFloat(meal.fat || meal.fats) || 0;
+                    totals.fiber += parseFloat(meal.fiber) || 0;
+                  }
+                });
+                
+                setMacroData(totals);
+                
+                // Debug logging
+                console.log('Dashboard macro data:', totals);
+                console.log('User TDEE:', parsedUserData.tdee);
+                console.log('Calories percentage:', Math.round((totals.calories / parsedUserData.tdee) * 100));
+                
+                // Calculate weekly data for chart
+                const weeklyTotals = [];
+                allWeekDays.forEach(day => {
+                  const dayKey = dayMapping[day];
+                  const dayData = currentWeek.days[dayKey];
+                  let dayTotal = 0;
+                  
+                  if (dayData) {
+                    Object.values(dayData).forEach(meal => {
+                      if (meal) {
+                        dayTotal += parseInt(meal.calories) || 0;
+                      }
+                    });
+                  }
+                  
+                  weeklyTotals.push({ day, value: dayTotal });
+                });
+                
+                setWeeklyData(weeklyTotals);
+              }
+            } catch (error) {
+              console.error('Error fetching meal data:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      } finally {
+        setMealsLoading(false);
+      }
+    };
+
+    loadUserDataAndCalculateMacros();
+  }, []); // Remove loadUserData dependency to prevent infinite re-renders
+
+  // Handle weight update function
+  const handleUpdateWeight = async () => {
+    if (!newWeight || isNaN(parseFloat(newWeight))) {
+      alert('Please enter a valid weight number');
+      return;
+    }
+
+    const weightValue = parseFloat(newWeight);
+    if (weightValue <= 0 || weightValue > 500) {
+      alert('Please enter a weight between 0 and 500 kg');
+      return;
+    }
+
+    try {
+      setUpdatingWeight(true);
+      const userId = userData?.userId || userData?.id;
+      
+      if (!userId) {
+        throw new Error('User not found');
+      }
+
+      // Update weight in database
+      const response = await ApiService.updateUser(userId, {
+        weight: weightValue.toString()
+      });
+
+      if (response.success) {
+        // Update UserDataContext
+        updateWeight(weightValue, userData.weightUnit || 'kg');
+        
+        // Update localStorage
+        const updatedUserData = { ...userData, weight: weightValue.toString() };
+        localStorage.setItem('user_data', JSON.stringify(updatedUserData));
+        
+        alert('Weight updated successfully!');
+        setShowWeightModal(false);
+        setNewWeight('');
+      } else {
+        throw new Error(response.message || 'Failed to update weight');
+      }
+    } catch (error) {
+      console.error('Error updating weight:', error);
+      alert('Failed to update weight. Please try again.');
+    } finally {
+      setUpdatingWeight(false);
+    }
+  };
+
+  const heroMeals = [
     {
       id: "breakfast",
       image: "/images/dashboard/breakfast.png",
@@ -163,7 +385,7 @@ export default function Dashboard() {
     );
   };
 
-  const weeklyData = [
+  const [weeklyData, setWeeklyData] = useState([
     { day: "MON", value: 450 },
     { day: "TUE", value: 520 },
     { day: "WED", value: 480 },
@@ -171,7 +393,7 @@ export default function Dashboard() {
     { day: "FRI", value: 580 },
     { day: "SAT", value: 650 },
     { day: "SUN", value: 590 },
-  ];
+  ]);
 
   const chartData = {
     labels: weeklyData.map(item => item.day),
@@ -319,7 +541,7 @@ export default function Dashboard() {
   const floatingItem2Ref = useRef(null);
   const floatingItem3Ref = useRef(null);
 
-  const mainImageRefs = useRef(meals.map(() => ({ current: null })));
+  const mainImageRefs = useRef(heroMeals.map(() => ({ current: null })));
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -330,10 +552,10 @@ export default function Dashboard() {
       mainImageRefs.current.forEach((ref) =>
         gsap.set(ref.current, { opacity: 0, x: 300 })
       );
-      if (titleRef.current) titleRef.current.textContent = meals[0].title;
-      if (priceRef.current) priceRef.current.textContent = meals[0].price;
+      if (titleRef.current) titleRef.current.textContent = heroMeals[0].title;
+      if (priceRef.current) priceRef.current.textContent = heroMeals[0].price;
       if (descriptionRef.current)
-        descriptionRef.current.textContent = meals[0].description;
+        descriptionRef.current.textContent = heroMeals[0].description;
 
       ScrollTrigger.create({
         trigger: containerRef.current,
@@ -362,11 +584,11 @@ export default function Dashboard() {
         },
       });
 
-      meals.forEach((meal, index) => {
+      heroMeals.forEach((meal, index) => {
         ScrollTrigger.create({
           trigger: containerRef.current,
-          start: `${(index / meals.length) * 100}% top`,
-          end: `${((index + 1) / meals.length) * 100}% top`,
+          start: `${(index / heroMeals.length) * 100}% top`,
+          end: `${((index + 1) / heroMeals.length) * 100}% top`,
           onEnter: () => {
             gsap.fromTo(
               [titleRef.current, priceRef.current, descriptionRef.current],
@@ -404,7 +626,7 @@ export default function Dashboard() {
             );
           },
           onLeave: () => {
-            if (index < meals.length - 1) {
+            if (index < heroMeals.length - 1) {
               gsap.set(mainImageRefs.current[index + 1].current, {
                 opacity: 0,
                 x: 300,
@@ -455,17 +677,17 @@ export default function Dashboard() {
         floatingItem2Ref,
         floatingItem3Ref,
       ];
-      meals.forEach((meal, index) => {
+      heroMeals.forEach((meal, index) => {
         ScrollTrigger.create({
           trigger: containerRef.current,
-          start: `${(index / meals.length) * 100}% top`,
-          end: `${((index + 1) / meals.length) * 100}% top`,
+          start: `${(index / heroMeals.length) * 100}% top`,
+          end: `${((index + 1) / heroMeals.length) * 100}% top`,
           onUpdate: (self) => {
             const progress = self.progress;
             const radius = 250;
             const centerX = 250;
             const centerY = 200;
-            const baseAngle = (index / meals.length) * 360 + progress * 120;
+            const baseAngle = (index / heroMeals.length) * 360 + progress * 120;
 
             // floatingRefs.forEach((ref, i) => {
             //   const angle = baseAngle + i * 120;
@@ -490,7 +712,7 @@ export default function Dashboard() {
     }, containerRef);
 
     return () => ctx.revert();
-  }, [meals]);
+  }, []); // Remove meals dependency to prevent constant re-initialization
 
   return (
     <>
@@ -508,19 +730,19 @@ export default function Dashboard() {
                     ref={titleRef}
                     className="text-4xl font-bold text-gray-900 mb-4"
                   >
-                    {meals[0].title}
+                    {heroMeals[0].title}
                   </h1>
                   <div
                     ref={priceRef}
                     className="text-3xl font-bold text-green-500 mb-6"
                   >
-                    {meals[0].price}
+                    {heroMeals[0].price}
                   </div>
                   <p
                     ref={descriptionRef}
                     className="text-lg text-gray-600 mb-8 leading-relaxed"
                   >
-                    {meals[0].description}
+                    {heroMeals[0].description}
                   </p>
                   <button className="bg-green-500 hover:bg-green-600 text-white font-semibold px-8 py-3 rounded-full transition-colors duration-200">
                     Add to Cart
@@ -542,7 +764,7 @@ export default function Dashboard() {
                   {/* Main Food Images (stacked) */}
                   <div className="relative -right-15 z-10 flex items-center justify-center h-100">
                     <div className="relative w-[550px] h-[550px] max-xl:w-[450px] max-xl:h-[450px]">
-                      {meals.map((meal, index) => (
+                      {heroMeals.map((meal, index) => (
                         <Image
                           key={index}
                           ref={mainImageRefs.current[index]}
@@ -618,107 +840,166 @@ export default function Dashboard() {
 
         {/* Dashboard Statistics Sections */}
         <div className="container mx-auto px-4 py-16">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
-            {/* Your Statistics Section */}
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-500">
-                  Your Statistics
-                </h2>
-                <button className="text-gray-400 hover:text-gray-600">
-                  <svg
-                    className="w-5 h-5"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" />
-                  </svg>
-                </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-16">
+            {/* Macros Log - Takes 1 column */}
+            <div className="bg-white rounded-3xl p-6 shadow-lg border border-green-100">
+              <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">Macros Log</h2>
+              
+              {mealsLoading ? (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-500"></div>
+                  <p className="mt-4 text-lg text-gray-600">Loading Macros...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Circular Progress with Calories */}
+                  <div className="flex flex-col items-center mb-6">
+                    <div className="relative mb-4">
+                      <HomeCircularProgress
+                        value={totalCalories}
+                        max={userData?.tdee || 2000}
+                        size={160}
+                        strokeWidth={12}
+                        color="#07da63"
+                        trackColor="#e5f8ed"
+                      >
+                        <div className="text-center">
+                          <div className="text-2xl font-bold text-gray-900">{totalCalories || 0}</div>
+                          <div className="text-xs text-gray-500">Calories</div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {/* Main Circular Progress Chart */}
-                <div className="col-span-2 lg:col-span-1 flex flex-col items-center justify-center p-6">
-                  <CircularProgressChart 
-                    targetValue={81} 
-                    color="#10b981" 
-                    trackColor="#dcfce7"
-                    label="Total Kcal" 
-                    size="lg"
-                  />
+                      </HomeCircularProgress>
                 </div>
 
-                {/* Small Circular Progress Charts */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex flex-col items-center justify-center p-3">
-                    <CircularProgressChart 
-                      targetValue={22} 
-                      color="#f97316" 
-                      trackColor="#fed7aa"
-                      label="Protein" 
-                      size="sm"
-                    />
+                    <div className="flex justify-between w-full text-center">
+                      <div>
+                        <div className="text-lg font-bold text-gray-900">{userData?.tdee ? Math.round(userData.tdee * 0.9) : 1431}</div>
+                        <div className="text-xs text-gray-500">Min</div>
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-gray-900">{userData?.tdee ? Math.round(userData.tdee * 1.1) : 2706}</div>
+                        <div className="text-xs text-gray-500">Max</div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col items-center justify-center p-3">
-                    <CircularProgressChart 
-                      targetValue={62} 
-                      color="#60a5fa" 
-                      trackColor="#dbeafe"
-                      label="Carbs" 
-                      size="sm"
-                    />
+                  {/* Macros Row */}
+                  <div className="flex justify-between mb-4 px-2">
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Protein</div>
+                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.protein)}g</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Fat</div>
+                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.fats)}g</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-gray-500 mb-1">Carbs</div>
+                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.carbs)}g</div>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col items-center justify-center p-3">
-                    <CircularProgressChart 
-                      targetValue={22} 
-                      color="#fbbf24" 
-                      trackColor="#fef3c7"
-                      label="Fats" 
-                      size="sm"
-                    />
+                  {/* Single Tab Display */}
+                  <div className="bg-gray-100 rounded-xl p-1">
+                    <div className="bg-black rounded-lg py-2 text-center">
+                      <span className="text-sm font-semibold text-white">Total Macros Today</span>
+                    </div>
+                  </div>
+                </>
+              )}
                   </div>
 
-                  <div className="flex flex-col items-center justify-center p-3">
-                    <CircularProgressChart 
-                      targetValue={62} 
-                      color="#9ca3af" 
-                      trackColor="#f3f4f6"
-                      label="Fiber" 
-                      size="sm"
-                    />
+            {/* Weight Tracker Section */}
+            <div className="bg-green-50 rounded-3xl p-6 shadow-lg">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Weight Tracker</h2>
+              <div className="space-y-4 mb-6">
+                <div className="bg-white rounded-2xl p-4 shadow-sm">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-sm text-gray-500">Current Weight</span>
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                      </svg>
                   </div>
                 </div>
+                  <div className="flex items-end">
+                    <span className="text-3xl font-bold text-gray-900">{userData?.weight || '0'}</span>
+                    <span className="text-gray-400 ml-2 mb-1">{userData?.weightUnit || 'Kgs'}</span>
+                  </div>
+                </div>
+                <div className="bg-white rounded-2xl p-4 shadow-sm">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-sm text-gray-500">BMI</span>
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="flex items-end">
+                    <span className="text-3xl font-bold" style={{ color: bmiColor }}>{currentBMI}</span>
+                    <span className="text-gray-400 ml-2 mb-1">Index</span>
+                  </div>
               </div>
             </div>
 
-            {/* Your Weekly Count Section */}
-            <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-500">
-                  Your Weekly Count
-                </h2>
-                <select className="text-sm border border-gray-300 rounded-lg px-3 py-1">
-                  <option>Weekly</option>
-                  <option>Monthly</option>
-                </select>
+              <p className="text-sm text-gray-500 mb-6">
+                Last Updated: {new Date().toLocaleDateString()}
+              </p>
+
+              <button 
+                className="w-full bg-green-500 text-white py-4 rounded-2xl font-bold hover:bg-green-600 transition-colors"
+                onClick={() => {
+                  setNewWeight(userData?.weight?.toString() || '');
+                  setShowWeightModal(true);
+                }}
+              >
+                UPDATE WEIGHT
+              </button>
               </div>
 
+            {/* Insights & Analytics Section */}
+            <div className="bg-white rounded-3xl p-6 shadow-lg border border-green-100">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">Insights & Analytics</h2>
+              <div className="space-y-6">
+                {/* Weight Trend */}
+                <div className="bg-gray-50 rounded-2xl p-4">
               <div className="mb-4">
-                <div className="flex justify-between text-xs text-gray-600 mb-2">
-                  {weeklyData.map((day) => (
-                    <span key={day.day}>{day.day}</span>
+                    <h4 className="text-lg font-bold text-gray-900">Weight Trend</h4>
+                    <p className="text-sm text-gray-500">Sep 30 - Now</p>
+                  </div>
+                  <div className="flex items-end justify-between h-20 gap-2">
+                    {[65, 45, 55, 70, 50, 75, 60].map((height, index) => (
+                      <div 
+                        key={index} 
+                        className={`flex-1 rounded-sm ${
+                          index % 2 === 0 ? 'bg-green-500' : 'bg-gray-200'
+                        }`}
+                        style={{ height: `${height}%` }}
+                      />
                   ))}
                 </div>
               </div>
 
-              <div style={{ width: '100%', height: '200px' }}>
-                <Line data={chartData} options={chartOptions} />
+                {/* BMI Status */}
+                <div className="bg-gray-50 rounded-2xl p-4">
+                  <div className="mb-4">
+                    <h4 className="text-lg font-bold text-gray-900">BMI Status</h4>
+                    <p className="text-sm text-gray-500">Current</p>
               </div>
-
-              <div className="mt-4 text-center">
-                <p className="text-lg font-bold text-gray-900">659 Kcal</p>
+                  <div className="text-center py-4">
+                    <div className="text-4xl font-bold mb-2" style={{ color: bmiColor }}>{currentBMI}</div>
+                    <div className="text-sm text-gray-500 mb-4">Body Mass Index</div>
+                    <button 
+                      className="flex items-center gap-2 text-sm font-semibold text-green-500 hover:text-green-600 transition-colors mx-auto"
+                      onClick={() => router.push('/results/bmi?fromHome=true')}
+                    >
+                      View Details
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -848,6 +1129,64 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+      
+      {/* Weight Update Modal */}
+      {showWeightModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl p-8 w-11/12 max-w-lg">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Update Weight</h3>
+              <button 
+                onClick={() => setShowWeightModal(false)}
+                className="text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <label className="block text-base text-gray-600 mb-4">
+              Enter your current weight (kg)
+            </label>
+            <input
+              type="number"
+              className="w-full bg-gray-50 rounded-xl p-5 text-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              placeholder="e.g. 70.5"
+              value={newWeight}
+              onChange={(e) => setNewWeight(e.target.value)}
+              autoFocus
+            />
+
+            <div className="flex gap-4 mt-8">
+              <button
+                className="flex-1 bg-gray-100 text-gray-600 py-4 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+                onClick={() => setShowWeightModal(false)}
+                disabled={updatingWeight}
+              >
+                Cancel
+              </button>
+              <button
+                className={`flex-1 py-4 rounded-xl font-bold text-white transition-colors ${
+                  updatingWeight ? 'bg-green-300' : 'bg-green-500 hover:bg-green-600'
+                }`}
+                onClick={handleUpdateWeight}
+                disabled={updatingWeight}
+              >
+                {updatingWeight ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Updating...
+                  </div>
+                ) : (
+                  'Update'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </>
   );

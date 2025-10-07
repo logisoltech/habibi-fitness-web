@@ -19,7 +19,7 @@ export default function Login() {
   const containerRef = useRef(null);
   const leaf1Ref = useRef(null);
   const leaf2Ref = useRef(null);
-  
+
   const router = useRouter();
   const { login, loading, error, clearError } = useAuth();
 
@@ -41,22 +41,26 @@ export default function Login() {
     const handleScroll = () => {
       const scrollY = window.scrollY;
       if (leaf1Ref.current && leaf2Ref.current) {
-        leaf1Ref.current.style.transform = `translateY(${scrollY * 0.5}px) rotate(${scrollY * 0.1}deg)`;
-        leaf2Ref.current.style.transform = `translateY(${scrollY * -0.3}px) rotate(${180 + scrollY * -0.1}deg)`;
+        leaf1Ref.current.style.transform = `translateY(${
+          scrollY * 0.5
+        }px) rotate(${scrollY * 0.1}deg)`;
+        leaf2Ref.current.style.transform = `translateY(${
+          scrollY * -0.3
+        }px) rotate(${180 + scrollY * -0.1}deg)`;
       }
     };
 
     const container = containerRef.current;
     if (container) {
-      container.addEventListener('mousemove', handleMouseMove);
+      container.addEventListener("mousemove", handleMouseMove);
     }
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener("scroll", handleScroll);
 
     return () => {
       if (container) {
-        container.removeEventListener('mousemove', handleMouseMove);
+        container.removeEventListener("mousemove", handleMouseMove);
       }
-      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -84,7 +88,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!phoneNumber) {
       setSubmitError("Please enter your phone number");
       return;
@@ -94,13 +98,39 @@ export default function Login() {
     setSubmitError("");
 
     try {
-      const result = await login(phoneNumber);
-      
-      // Store phone number for OTP verification
-      sessionStorage.setItem('login_phone', phoneNumber);
-      
-      // Navigate to OTP verification page
-      router.push('/auth/verify-otp');
+      // const result = await login(phoneNumber);
+
+      // // Store phone number for OTP verification
+      // sessionStorage.setItem('login_phone', phoneNumber);
+
+      // // Navigate to OTP verification page
+      // router.push('/auth/verify-otp');
+
+      // Use server.js API directly instead of Next.js API
+      const response = await fetch(
+        "http://localhost:5000/api/users/phone/" +
+          encodeURIComponent(phoneNumber),
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Store user data in localStorage for home page
+        localStorage.setItem("user_data", JSON.stringify(result.data));
+
+        // Navigate directly to home page
+        router.push("/home");
+      } else {
+        setSubmitError(
+          result.message || "User not found. Please sign up first."
+        );
+      }
     } catch (error) {
       setSubmitError(error.message);
     } finally {
@@ -114,7 +144,7 @@ export default function Login() {
     const offsetY = (mousePosition.y - 0.5) * intensity * (reverse ? -1 : 1);
     return {
       transform: `translate(${offsetX * 20}px, ${offsetY * 20}px)`,
-      transition: 'transform 0.1s ease-out',
+      transition: "transform 0.1s ease-out",
     };
   };
 
@@ -144,7 +174,7 @@ export default function Login() {
           }`}
           style={{
             ...getParallaxStyle(1.5),
-            animation: isLoaded ? 'floatLeaf1 6s ease-in-out infinite' : 'none',
+            animation: isLoaded ? "floatLeaf1 6s ease-in-out infinite" : "none",
           }}
         >
           <Image
@@ -184,9 +214,13 @@ export default function Login() {
 
             {/* Error Message */}
             {(submitError || error) && (
-              <div className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${
-                isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-              }`}>
+              <div
+                className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${
+                  isLoaded
+                    ? "translate-y-0 opacity-100"
+                    : "translate-y-4 opacity-0"
+                }`}
+              >
                 {submitError || error}
               </div>
             )}
@@ -269,7 +303,7 @@ export default function Login() {
           }`}
           style={{
             ...getParallaxStyle(1.2, true),
-            animation: isLoaded ? 'floatLeaf2 8s ease-in-out infinite' : 'none',
+            animation: isLoaded ? "floatLeaf2 8s ease-in-out infinite" : "none",
           }}
         >
           <Image
@@ -288,7 +322,9 @@ export default function Login() {
           }`}
           style={{
             ...getParallaxStyle(0.8),
-            animation: isLoaded ? 'floatLeaf3 10s ease-in-out infinite' : 'none',
+            animation: isLoaded
+              ? "floatLeaf3 10s ease-in-out infinite"
+              : "none",
           }}
         >
           <Image
@@ -306,7 +342,9 @@ export default function Login() {
           }`}
           style={{
             ...getParallaxStyle(1.0, true),
-            animation: isLoaded ? 'floatLeaf4 12s ease-in-out infinite' : 'none',
+            animation: isLoaded
+              ? "floatLeaf4 12s ease-in-out infinite"
+              : "none",
           }}
         >
           <Image
@@ -324,7 +362,8 @@ export default function Login() {
 
       <style jsx>{`
         @keyframes floatLeaf1 {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0) rotate(0deg) scale(1);
           }
           25% {
@@ -339,7 +378,8 @@ export default function Login() {
         }
 
         @keyframes floatLeaf2 {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0) rotate(180deg) scale(1);
           }
           30% {
@@ -354,7 +394,8 @@ export default function Login() {
         }
 
         @keyframes floatLeaf3 {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0) rotate(45deg) scale(1);
           }
           33% {
@@ -366,7 +407,8 @@ export default function Login() {
         }
 
         @keyframes floatLeaf4 {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateY(0) rotate(-30deg) scale(1);
           }
           40% {

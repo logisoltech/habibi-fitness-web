@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import LeafCursorTrail from "./components/LeafCursorTrail";
 import { AuthProvider } from "./contexts/AuthContext";
+import { UserDataProvider } from "./contexts/UserDataContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,9 +25,9 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <UserDataProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </UserDataProvider>
         <LeafCursorTrail />
       </body>
     </html>

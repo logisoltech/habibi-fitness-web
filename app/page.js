@@ -28,13 +28,20 @@ export default function Hero() {
             your door!
           </p>
 
-          <div className="mt-7">
+          <div className="mt-7 flex flex-col sm:flex-row gap-4">
             <Link
               href="/menu"
-              className="inline-flex items-center gap-2 rounded-lg px-6 py-3 font-semibold text-white shadow-lg transition"
+              className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold text-white shadow-lg transition hover:opacity-90"
               style={{ backgroundColor: MAIN }}
             >
               See Our Menus
+            </Link>
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold border-2 shadow-lg transition hover:bg-white/10"
+              style={{ borderColor: MAIN, color: 'white' }}
+            >
+              Calculate BMI & TDEE
             </Link>
           </div>
         </div>
