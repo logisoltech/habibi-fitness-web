@@ -944,7 +944,7 @@ export default function Dashboard() {
                   <div className="flex items-end">
                     <span className="text-3xl font-bold" style={{ color: bmiColor }}>{currentBMI}</span>
                     <span className="text-gray-400 ml-2 mb-1">Index</span>
-                  </div>
+                </div>
               </div>
             </div>
 

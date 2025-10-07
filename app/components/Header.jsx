@@ -1,11 +1,11 @@
 // components/Header.jsx
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useAuth } from "../contexts/AuthContext";
+// import { useAuth } from "../contexts/AuthContext"; // Previous Supabase auth
 
 const MAIN = "#18BD0F"; // main color
 
@@ -13,7 +13,61 @@ export default function Header() {
   const [showBanner, setShowBanner] = useState(true);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const { user, isAuthenticated, logout } = useAuth();
+  // const { user, isAuthenticated, logout } = useAuth(); // Previous Supabase auth
+  
+  // New localStorage-based auth logic
+  const [user, setUser] = useState(null);
+  const [isAuth, setIsAuth] = useState(false);
+
+  // Check authentication status on component mount
+  React.useEffect(() => {
+    const checkAuth = () => {
+      try {
+        const userData = localStorage.getItem('user_data');
+        if (userData) {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setIsAuth(true);
+        } else {
+          setUser(null);
+          setIsAuth(false);
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        setUser(null);
+        setIsAuth(false);
+      }
+    };
+
+    checkAuth();
+    
+    // Listen for storage changes (e.g., when user logs in/out in another tab)
+    const handleStorageChange = (e) => {
+      if (e.key === 'user_data') {
+        checkAuth();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check on focus (when user returns to tab)
+    window.addEventListener('focus', checkAuth);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', checkAuth);
+    };
+  }, []);
+
+  const isAuthenticated = () => isAuth;
+  
+  const logout = () => {
+    localStorage.removeItem('user_data');
+    setUser(null);
+    setIsAuth(false);
+    // Redirect to home page after logout
+    window.location.href = '/';
+  };
 
   const nav = [
     { href: "/", label: "Home" },
@@ -88,11 +142,12 @@ export default function Header() {
             {isAuthenticated() ? (
               <div className="flex items-center gap-3">
                 <span className="text-gray-700 font-medium">
-                  Welcome, {user?.user_metadata?.full_name || 'User'}!
+                  Welcome, {user?.name || 'User'}!
                 </span>
                 <button
                   onClick={logout}
-                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 shadow-sm transition"
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-white border border-gray-300 hover:bg-gray-50 shadow-sm transition"
+                  style={{ backgroundColor: MAIN }}
                 >
                   Logout
                 </button>
@@ -205,7 +260,7 @@ export default function Header() {
               {isAuthenticated() ? (
                 <div className="space-y-2">
                   <div className="text-center text-gray-700 font-medium py-2">
-                    Welcome, {user?.user_metadata?.full_name || 'User'}!
+                    Welcome, {user?.name || 'User'}!
                   </div>
                   <button
                     onClick={() => {
