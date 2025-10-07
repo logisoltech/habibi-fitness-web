@@ -122,6 +122,7 @@ export default function Dashboard() {
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [newWeight, setNewWeight] = useState('');
   const [updatingWeight, setUpdatingWeight] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   const { bmi: currentBMI, color: bmiColor } = getBMIInfo();
 
@@ -159,6 +160,11 @@ export default function Dashboard() {
     updateScreenWidth();
     window.addEventListener('resize', updateScreenWidth);
     return () => window.removeEventListener('resize', updateScreenWidth);
+  }, []);
+
+  // Set client-side flag to prevent hydration issues
+  useEffect(() => {
+    setIsClient(true);
   }, []);
 
   // Load user data and calculate macros
@@ -864,7 +870,7 @@ export default function Dashboard() {
                         trackColor="#e5f8ed"
                       >
                         <div className="text-center">
-                          <div className="text-2xl font-bold text-gray-900">{totalCalories || 0}</div>
+                          <div className="text-2xl font-bold text-gray-900">{isClient ? (totalCalories || 0) : 0}</div>
                           <div className="text-xs text-gray-500">Calories</div>
               </div>
                       </HomeCircularProgress>
@@ -872,11 +878,11 @@ export default function Dashboard() {
 
                     <div className="flex justify-between w-full text-center">
                       <div>
-                        <div className="text-lg font-bold text-gray-900">{userData?.tdee ? Math.round(userData.tdee * 0.9) : 1431}</div>
+                        <div className="text-lg font-bold text-gray-900">{isClient && userData?.tdee ? Math.round(userData.tdee * 0.9) : 1431}</div>
                         <div className="text-xs text-gray-500">Min</div>
                       </div>
                       <div>
-                        <div className="text-lg font-bold text-gray-900">{userData?.tdee ? Math.round(userData.tdee * 1.1) : 2706}</div>
+                        <div className="text-lg font-bold text-gray-900">{isClient && userData?.tdee ? Math.round(userData.tdee * 1.1) : 2706}</div>
                         <div className="text-xs text-gray-500">Max</div>
                       </div>
                     </div>
@@ -886,15 +892,15 @@ export default function Dashboard() {
                   <div className="flex justify-between mb-4 px-2">
                     <div className="text-center">
                       <div className="text-xs text-gray-500 mb-1">Protein</div>
-                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.protein)}g</div>
+                      <div className="text-lg font-bold text-gray-900">{isClient ? Math.round(macroTotals.protein) : 0}g</div>
                     </div>
                     <div className="text-center">
                       <div className="text-xs text-gray-500 mb-1">Fat</div>
-                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.fats)}g</div>
+                      <div className="text-lg font-bold text-gray-900">{isClient ? Math.round(macroTotals.fats) : 0}g</div>
                     </div>
                     <div className="text-center">
                       <div className="text-xs text-gray-500 mb-1">Carbs</div>
-                      <div className="text-lg font-bold text-gray-900">{Math.round(macroTotals.carbs)}g</div>
+                      <div className="text-lg font-bold text-gray-900">{isClient ? Math.round(macroTotals.carbs) : 0}g</div>
                     </div>
                   </div>
 
