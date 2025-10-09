@@ -1,27 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { IoMan, IoWoman, IoFitness, IoCheckmarkCircle } from 'react-icons/io5';
+import { useUserData } from '../contexts/UserDataContext';
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { 
+    userData,
+    updateWeight, 
+    updateHeight, 
+    updateName, 
+    updatePersonalInfo, 
+    updateAddress, 
+    updateActivityLevel 
+  } = useUserData();
   
-  // Weight states
-  const [weight, setWeight] = useState(70);
-  const [weightUnit, setWeightUnit] = useState('kg');
+  // Weight states - Initialize from context if available
+  const [weight, setWeight] = useState(userData.weight || 70);
+  const [weightUnit, setWeightUnit] = useState(userData.weightUnit || 'kg');
   
-  // Height states
-  const [height, setHeight] = useState(170);
-  const [heightUnit, setHeightUnit] = useState('cm');
+  // Height states - Initialize from context if available
+  const [height, setHeight] = useState(userData.height || 170);
+  const [heightUnit, setHeightUnit] = useState(userData.heightUnit || 'cm');
   
-  // Personal details states
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [gender, setGender] = useState('');
-  const [address, setAddress] = useState('');
-  const [activityLevel, setActivityLevel] = useState('Moderate');
+  // Personal details states - Initialize from context if available
+  const [age, setAge] = useState(userData.age ? userData.age.toString() : '');
+  const [gender, setGender] = useState(userData.gender || '');
+  const [address, setAddress] = useState(userData.address || '');
+  const [activityLevel, setActivityLevel] = useState(userData.activity || 'Moderate');
   const [showActivityModal, setShowActivityModal] = useState(false);
   
   const activityLevels = [
@@ -48,7 +57,15 @@ export default function OnboardingPage() {
       const convertedWeight = convertWeight(weight, weightUnit, newUnit);
       setWeight(convertedWeight);
       setWeightUnit(newUnit);
+      // Update context in real-time
+      updateWeight(convertedWeight, newUnit);
     }
+  };
+
+  // Update context when weight changes
+  const handleWeightChange = (newWeight) => {
+    setWeight(newWeight);
+    updateWeight(newWeight, weightUnit);
   };
 
   // Height conversion
@@ -67,29 +84,46 @@ export default function OnboardingPage() {
       const convertedHeight = convertHeight(height, heightUnit, newUnit);
       setHeight(convertedHeight);
       setHeightUnit(newUnit);
+      // Update context in real-time
+      updateHeight(convertedHeight, newUnit);
     }
   };
 
+  // Update context when height changes
+  const handleHeightChange = (newHeight) => {
+    setHeight(newHeight);
+    updateHeight(newHeight, heightUnit);
+  };
+
   const isFormValid = () => {
-    return name.trim() && age.trim() && gender && address.trim() && activityLevel;
+    return age.trim() && gender && address.trim() && activityLevel;
   };
 
   const handleSubmit = () => {
     if (!isFormValid()) return;
     
-    const userData = {
+    // Save all data to UserDataContext
+    updateWeight(weight, weightUnit);
+    updateHeight(height, heightUnit);
+    updatePersonalInfo(parseInt(age), gender);
+    updateAddress(address);
+    updateActivityLevel(activityLevel);
+    
+    // Also save to localStorage as backup
+    const userDataBackup = {
       weight,
       weightUnit,
       height,
       heightUnit,
-      name,
       age: parseInt(age),
       gender,
       address,
       activityLevel
     };
-    localStorage.setItem('userData', JSON.stringify(userData));
-    router.push('/results/bmi');
+    localStorage.setItem('userData', JSON.stringify(userDataBackup));
+    
+    // Navigate to goal page (next step in registration)
+    router.push('/goal');
   };
 
   const containerVariants = {
@@ -178,7 +212,7 @@ export default function OnboardingPage() {
                 min={minWeight}
                 max={maxWeight}
                 value={weight}
-                onChange={(e) => setWeight(parseInt(e.target.value))}
+                onChange={(e) => handleWeightChange(parseInt(e.target.value))}
                 className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#07da63]"
                 style={{
                   background: `linear-gradient(to right, #07da63 0%, #07da63 ${((weight - minWeight) / (maxWeight - minWeight)) * 100}%, #e0e0e0 ${((weight - minWeight) / (maxWeight - minWeight)) * 100}%, #e0e0e0 100%)`
@@ -232,7 +266,7 @@ export default function OnboardingPage() {
                 min={minHeight}
                 max={maxHeight}
                 value={height}
-                onChange={(e) => setHeight(parseInt(e.target.value))}
+                onChange={(e) => handleHeightChange(parseInt(e.target.value))}
                 className="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#07da63]"
                 style={{
                   background: `linear-gradient(to right, #07da63 0%, #07da63 ${((height - minHeight) / (maxHeight - minHeight)) * 100}%, #e0e0e0 ${((height - minHeight) / (maxHeight - minHeight)) * 100}%, #e0e0e0 100%)`
@@ -252,20 +286,6 @@ export default function OnboardingPage() {
               <h2 className="text-2xl font-bold text-gray-800 mb-6">Personal Information</h2>
               
               <div className="space-y-5">
-                {/* Name Input */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Full Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. John Doe"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#07da63] focus:border-transparent transition-all"
-                  />
-                </div>
-
                 {/* Age Input */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">

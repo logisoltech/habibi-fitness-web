@@ -374,7 +374,8 @@ export const UserDataProvider = ({ children }) => {
   };
 
   // Function to register user (save to database)
-  const registerUser = async () => {
+  // Accepts optional overrides for values that might not be in context yet
+  const registerUser = async (overrides = {}) => {
     try {
       // Calculate BMI before saving
       const bmiInfo = getBMIInfo();
@@ -382,37 +383,44 @@ export const UserDataProvider = ({ children }) => {
       // Calculate TDEE based on goal
       const calculatedTDEE = calculateTDEEForGoal();
       
+      // Merge userData with overrides (overrides take precedence)
+      const mergedData = { ...userData, ...overrides };
+      
       // Prepare user data for database
       const registrationData = {
-        name: userData.name,
-        phone: userData.phone,
-        address: userData.address,
-        activity: userData.activity,
-        plan: userData.plan,
-        goal: userData.goal,
-        weight: userData.weight.toString(),
-        height: userData.height.toString(),
-        age: userData.age?.toString(),
-        gender: userData.gender,
-        mealcount: userData.mealcount?.toString(),
-        mealtypes: userData.mealtypes,
-        selecteddays: userData.selecteddays,
-        subscription: userData.subscription,
+        name: mergedData.name,
+        phone: mergedData.phone,
+        address: mergedData.address,
+        activity: mergedData.activity,
+        plan: mergedData.plan,
+        goal: mergedData.goal,
+        weight: mergedData.weight.toString(),
+        height: mergedData.height.toString(),
+        age: mergedData.age?.toString(),
+        gender: mergedData.gender,
+        mealcount: mergedData.mealcount?.toString(),
+        mealtypes: mergedData.mealtypes,
+        selecteddays: mergedData.selecteddays,
+        subscription: mergedData.subscription || 'monthly', // Default to monthly
         bmi: bmiInfo.bmi.toString(),
         tdee: calculatedTDEE.toString(), // TDEE based on goal
-        allergies: userData.allergies, // Array of allergies/health conditions
-        cardnumber: userData.cardnumber,
-        cvc: userData.cvc,
-        expiry: userData.expiry,
-        service: userData.service,
+        allergies: mergedData.allergies, // Array of allergies/health conditions
+        // Payment fields - optional for now (can be added later)
+        cardnumber: mergedData.cardnumber || null,
+        cvc: mergedData.cvc || null,
+        expiry: mergedData.expiry || null,
+        service: mergedData.service || null,
       };
+
+      console.log('📤 Sending registration data to API:', registrationData);
 
       const result = await ApiService.createUser(registrationData);
 
       if (result.success) {
-        // Update context with registration success
+        // Update context with registration success AND the final merged data
         setUserData(prev => ({
           ...prev,
+          ...mergedData, // Update with merged data
           isRegistered: true,
           userId: result.data.id,
           bmi: bmiInfo.bmi,

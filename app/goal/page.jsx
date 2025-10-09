@@ -85,19 +85,19 @@ const GoalPage = () => {
     const isFormValid = selectedGoal !== null &&
         (selectedConditions.length > 0 || customAllergies.length > 0);
 
-    const handleSubmit = () => {
-        if (!isFormValid) return;
+  const handleSubmit = () => {
+    if (!isFormValid) return;
 
-        // Save goal to context
-        updateGoal(selectedGoal);
-
-        // Combine selected conditions and custom allergies
-        const allergies = [...selectedConditions, ...customAllergies];
-        updateAllergies(allergies);
-
-        // Navigate to next page (you can change this to your next route)
-        router.push('/dashboard'); // or wherever you want to navigate
-    };
+    // Save goal to context
+    updateGoal(selectedGoal);
+    
+    // Combine selected conditions and custom allergies
+    const allergies = [...selectedConditions, ...customAllergies];
+    updateAllergies(allergies);
+    
+    // Navigate to user-preference page (next step: dietary plan + meal selection)
+    router.push('/user-preference');
+  };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-green-50 relative overflow-hidden">

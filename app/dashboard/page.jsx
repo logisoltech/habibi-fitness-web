@@ -281,10 +281,6 @@ export default function Dashboard() {
     try {
       setUpdatingWeight(true);
       const userId = userData?.userId || userData?.id;
-      
-      if (!userId) {
-        throw new Error('User not found');
-      }
 
       // Update weight in database
       const response = await ApiService.updateUser(userId, {
