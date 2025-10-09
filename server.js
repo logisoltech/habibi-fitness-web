@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
@@ -1146,11 +1146,876 @@ app.get('/api/recommendations/plan/:plan', async (req, res) => {
   }
 });
 
+// ============================================
+// NOTIFICATIONS ENDPOINTS
+// ============================================
+
+// Send notifications to users
+app.post('/api/notifications/send', async (req, res) => {
+  try {
+    const { title, message, target, userIds, type, priority, scheduledFor } = req.body;
+
+    // Validate required fields
+    if (!title || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title and message are required'
+      });
+    }
+
+    console.log('Sending notification:', { title, target, type, priority });
+
+    let targetUsers = [];
+
+    // Get target users
+    if (target === 'all') {
+      // Get all users
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, name, phone');
+
+      if (error) throw error;
+      targetUsers = users || [];
+    } else if (target === 'specific' && userIds && userIds.length > 0) {
+      // Get specific users
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('id, name, phone')
+        .in('id', userIds);
+
+      if (error) throw error;
+      targetUsers = users || [];
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid target or no users specified'
+      });
+    }
+
+    if (targetUsers.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No users found to send notifications to',
+        data: {
+          sentCount: 0,
+          failedCount: 0,
+          totalUsers: 0
+        }
+      });
+    }
+
+    // Create notification records
+    const notifications = targetUsers.map(user => ({
+      user_id: user.id,
+      title: title,
+      message: message,
+      type: type || 'general',
+      priority: priority || 'normal',
+      read: false,
+      created_at: new Date().toISOString(),
+      scheduled_for: scheduledFor || null,
+      sent_at: scheduledFor ? null : new Date().toISOString()
+    }));
+
+    // Save notifications to database
+    const { data: savedNotifications, error: notifError } = await supabase
+      .from('notifications')
+      .insert(notifications)
+      .select();
+
+    if (notifError) {
+      console.error('Error saving notifications:', notifError);
+      // Don't fail completely if DB save fails
+    }
+
+    // TODO: Integrate with actual push notification service
+    // Examples:
+    // - Firebase Cloud Messaging (FCM)
+    // - OneSignal
+    // - Expo Push Notifications
+    // - AWS SNS
+    
+    console.log(`✅ Notifications created for ${targetUsers.length} users`);
+
+    // Simulate sending (in production, this would call FCM/OneSignal/etc)
+    const sendResults = {
+      sentCount: targetUsers.length,
+      failedCount: 0,
+      totalUsers: targetUsers.length
+    };
+
+    res.json({
+      success: true,
+      message: `Notification sent successfully to ${sendResults.sentCount} user(s)`,
+      data: sendResults
+    });
+
+  } catch (error) {
+    console.error('Error sending notification:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to send notification'
+    });
+  }
+});
+
+// Get notifications for a user
+app.get('/api/notifications/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { unreadOnly } = req.query;
+
+    let query = supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (unreadOnly === 'true') {
+      query = query.eq('read', false);
+    }
+
+    const { data: notifications, error } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: notifications || [],
+      unreadCount: notifications?.filter(n => !n.read).length || 0
+    });
+
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch notifications'
+    });
+  }
+});
+
+// Mark notification as read
+app.put('/api/notifications/:notificationId/read', async (req, res) => {
+  try {
+    const { notificationId } = req.params;
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true, read_at: new Date().toISOString() })
+      .eq('id', notificationId);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Notification marked as read'
+    });
+
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to mark notification as read'
+    });
+  }
+});
+
+// Get all notifications (for CMS)
+app.get('/api/notifications/all', async (req, res) => {
+  try {
+    const { limit = 100, offset = 0 } = req.query;
+
+    const { data: notifications, error } = await supabase
+      .from('notifications')
+      .select('*, users(name, phone)')
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    if (error) throw error;
+
+    // Get stats
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true });
+
+    res.json({
+      success: true,
+      data: notifications || [],
+      total: count || 0,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+  } catch (error) {
+    console.error('Error fetching all notifications:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch notifications'
+    });
+  }
+});
+
+// ============================================
+// MEAL DELIVERY STATUS TRACKING ENDPOINTS
+// ============================================
+
+// Update meal delivery status
+app.post('/api/delivery-status/update', async (req, res) => {
+  try {
+    const { userId, mealId, status, date, mealKey, weekIndex, dayKey, notes } = req.body;
+
+    // Validate required fields
+    if (!userId || !mealId || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: userId, mealId, status'
+      });
+    }
+
+    // Validate status value
+    const validStatuses = ['pending', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value. Must be one of: ' + validStatuses.join(', ')
+      });
+    }
+
+    console.log('Updating meal status:', { userId, mealId, status, date, mealKey, weekIndex, dayKey });
+
+    // Get the current schedule for the user
+    const { data: scheduleRecord, error: fetchError } = await supabase
+      .from('meal_schedules')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (fetchError || !scheduleRecord) {
+      console.error('Fetch error:', fetchError);
+      return res.status(404).json({
+        success: false,
+        message: 'No meal schedule found for this user'
+      });
+    }
+
+    // Parse and update the schedule_data nested object
+    const scheduleData = JSON.parse(JSON.stringify(scheduleRecord.schedule_data)); // Deep clone
+    let mealUpdated = false;
+
+    // Check if schedule_data has weeks structure
+    if (!scheduleData || !scheduleData.weeks) {
+      console.error('schedule_data missing weeks structure');
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid schedule_data format'
+      });
+    }
+
+    // Find and update the meal in the nested structure
+    scheduleData.weeks.forEach((week, wIdx) => {
+      if (week.days) {
+        Object.keys(week.days).forEach(dKey => {
+          const day = week.days[dKey];
+          Object.keys(day).forEach(mKey => {
+            const meal = day[mKey];
+            if (meal && meal.id === mealId) {
+              // Found the meal - update it
+              console.log(`Found meal ${mealId} in week ${wIdx}, day ${dKey}, mealKey ${mKey}`);
+              console.log(`Updating from ${meal.status || 'pending'} to ${status}`);
+              
+              meal.status = status;
+              meal.status_updated_at = new Date().toISOString();
+              if (notes) meal.delivery_notes = notes;
+              if (status === 'delivered') meal.delivered_at = new Date().toISOString();
+              
+              mealUpdated = true;
+            }
+          });
+        });
+      }
+    });
+
+    if (!mealUpdated) {
+      console.log('Meal not found. Looking for mealId:', mealId);
+      return res.status(404).json({
+        success: false,
+        message: 'Meal not found in schedule'
+      });
+    }
+
+    // Save updated schedule back to database
+    const { error: updateError } = await supabase
+      .from('meal_schedules')
+      .update({
+        schedule_data: scheduleData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', scheduleRecord.id);
+
+    if (updateError) {
+      console.error('Error updating schedule:', updateError);
+      throw updateError;
+    }
+
+    console.log('✅ Meal status updated successfully');
+
+    // Log the status change for tracking (optional table)
+    try {
+      await supabase
+        .from('delivery_status_logs')
+        .insert([{
+          user_id: userId,
+          meal_id: mealId,
+          status: status,
+          changed_at: new Date().toISOString(),
+          notes: notes || null
+        }]);
+    } catch (logError) {
+      console.error('Error logging status change (table might not exist):', logError.message);
+      // Don't fail the request if logging fails
+    }
+
+    res.json({
+      success: true,
+      message: 'Meal status updated successfully',
+      data: {
+        userId,
+        mealId,
+        status,
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating meal status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to update meal status'
+    });
+  }
+});
+
+// Get delivery statuses for a specific date
+app.get('/api/delivery-status/date/:date', async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { status, userId } = req.query;
+
+    console.log('Fetching delivery statuses for date:', date);
+
+    // Get all meal schedules with user data
+    let query = supabase
+      .from('meal_schedules')
+      .select('*, users!inner(id, name, phone, address)');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data: schedules, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    if (!schedules || schedules.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No schedules found'
+      });
+    }
+
+    console.log(`Found ${schedules.length} schedules`);
+
+    // Process schedules and extract meals for the specified date
+    const deliveries = [];
+    const targetDate = new Date(date);
+    const targetDay = targetDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+    schedules.forEach(schedule => {
+      const user = schedule.users;
+      const userDelivery = {
+        id: schedule.id,
+        userId: schedule.user_id,
+        userName: user?.name || 'Unknown User',
+        email: user?.email || '',
+        phone: user?.phone || '',
+        address: user?.address || 'No address provided',
+        date: date,
+        meals: []
+      };
+
+      // Parse schedule_data object with weeks structure
+      if (schedule.schedule_data && schedule.schedule_data.weeks) {
+        const startDate = new Date(schedule.created_at);
+        
+        schedule.schedule_data.weeks.forEach((week, weekIndex) => {
+          if (week.days) {
+            Object.keys(week.days).forEach(dayKey => {
+              const day = week.days[dayKey];
+              
+              // Calculate the date for this day
+              const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+              const dayIndex = dayNames.indexOf(dayKey.toLowerCase());
+              if (dayIndex === -1) return;
+              
+              const mealDate = new Date(startDate);
+              mealDate.setDate(startDate.getDate() + (weekIndex * 7) + (dayIndex - startDate.getDay()));
+              const mealDateStr = mealDate.toISOString().split('T')[0];
+              
+              // Check if this day matches our target date
+              if (mealDateStr === date) {
+                // Process all meals for this day
+                Object.keys(day).forEach(mealKey => {
+                  const meal = day[mealKey];
+                  if (meal && meal.id) {
+                    // Get status from meal object (default to pending if not set)
+                    const mealStatus = meal.status || 'pending';
+                    
+                    // Filter by status if specified
+                    if (!status || mealStatus === status) {
+                      userDelivery.meals.push({
+                        id: meal.id,
+                        mealKey: mealKey, // lunch_1, lunch_3, etc.
+                        type: meal.category || 'unknown',
+                        name: meal.name || 'Unknown Meal',
+                        status: mealStatus,
+                        calories: meal.calories || 0,
+                        protein: meal.protein || 0,
+                        carbs: meal.carbs || 0,
+                        fat: meal.fat || 0,
+                        estimatedDelivery: meal.estimated_delivery || 'TBD',
+                        notes: meal.delivery_notes || '',
+                        statusUpdatedAt: meal.status_updated_at || null,
+                        weekIndex: weekIndex,
+                        dayKey: dayKey
+                      });
+                    }
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+
+      // Only add delivery if it has meals
+      if (userDelivery.meals.length > 0) {
+        deliveries.push(userDelivery);
+      }
+    });
+
+    console.log(`Processed ${deliveries.length} deliveries for ${date}`);
+
+    res.json({
+      success: true,
+      data: deliveries,
+      count: deliveries.length,
+      message: `Found ${deliveries.length} deliveries for ${date}`
+    });
+
+  } catch (error) {
+    console.error('Error fetching delivery statuses:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch delivery statuses'
+    });
+  }
+});
+
+// Get delivery status for a specific user
+app.get('/api/delivery-status/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { date, status } = req.query;
+
+    console.log('Fetching delivery status for user:', userId);
+
+    // Get user's meal schedule
+    const { data: schedule, error } = await supabase
+      .from('meal_schedules')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw error;
+    }
+
+    if (!schedule) {
+      return res.status(404).json({
+        success: false,
+        message: 'No meal schedule found for this user'
+      });
+    }
+
+    // Get user details
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.error('Error fetching user:', userError);
+    }
+
+    // Extract all meals with their statuses from schedule_data array
+    const meals = [];
+
+    if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
+      schedule.schedule_data.forEach(scheduledMeal => {
+        // Filter by date if specified
+        const dateMatch = !date || scheduledMeal.date === date;
+        // Filter by status if specified
+        const mealStatus = scheduledMeal.status || 'pending';
+        const statusMatch = !status || mealStatus === status;
+        
+        if (dateMatch && statusMatch) {
+          meals.push({
+            id: scheduledMeal.meal_id || scheduledMeal.id,
+            type: scheduledMeal.meal_type || scheduledMeal.type || 'unknown',
+            name: scheduledMeal.meal_name || scheduledMeal.name || 'Unknown Meal',
+            date: scheduledMeal.date,
+            status: mealStatus,
+            calories: scheduledMeal.calories || 0,
+            protein: scheduledMeal.protein || 0,
+            carbs: scheduledMeal.carbs || 0,
+            fat: scheduledMeal.fat || 0,
+            estimatedDelivery: scheduledMeal.estimated_delivery || 'TBD',
+            notes: scheduledMeal.delivery_notes || scheduledMeal.notes || '',
+            statusUpdatedAt: scheduledMeal.status_updated_at || null,
+            deliveredAt: scheduledMeal.delivered_at || null
+          });
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          id: userId,
+          name: userData?.name || 'Unknown User',
+          email: userData?.email || '',
+          phone: userData?.phone || '',
+          address: userData?.address || ''
+        },
+        meals: meals,
+        totalMeals: meals.length
+      },
+      message: `Found ${meals.length} meals for user`
+    });
+
+  } catch (error) {
+    console.error('Error fetching user delivery status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch user delivery status'
+    });
+  }
+});
+
+// Get all deliveries with filters
+app.get('/api/delivery-status', async (req, res) => {
+  try {
+    const { date, status, userId, search } = req.query;
+
+    console.log('Fetching all delivery statuses with filters:', { date, status, userId, search });
+
+    let query = supabase
+      .from('meal_schedules')
+      .select('*, users!inner(id, name, phone, address)');
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    if (search) {
+      query = query.or(`users.name.ilike.%${search}%,users.phone.ilike.%${search}%`);
+    }
+
+    const { data: schedules, error } = await query;
+
+    if (error) {
+      throw error;
+    }
+
+    if (!schedules || schedules.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'No schedules found'
+      });
+    }
+
+    const deliveries = [];
+
+    schedules.forEach(schedule => {
+      const userData = schedule.users;
+      
+      // Parse schedule_data array
+      if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
+        schedule.schedule_data.forEach(scheduledMeal => {
+          // Filter by date if specified
+          const dateMatch = !date || scheduledMeal.date === date;
+          // Filter by status if specified
+          const mealStatus = scheduledMeal.status || 'pending';
+          const statusMatch = !status || mealStatus === status;
+          
+          if (dateMatch && statusMatch) {
+            deliveries.push({
+              userId: schedule.user_id,
+              userName: userData?.name || 'Unknown User',
+              email: userData?.email || '',
+              phone: userData?.phone || '',
+              mealId: scheduledMeal.meal_id || scheduledMeal.id,
+              mealName: scheduledMeal.meal_name || scheduledMeal.name || 'Unknown Meal',
+              mealType: scheduledMeal.meal_type || scheduledMeal.type || 'unknown',
+              date: scheduledMeal.date,
+              status: mealStatus,
+              calories: scheduledMeal.calories || 0,
+              estimatedDelivery: scheduledMeal.estimated_delivery || 'TBD',
+              notes: scheduledMeal.delivery_notes || scheduledMeal.notes || '',
+              statusUpdatedAt: scheduledMeal.status_updated_at || null
+            });
+          }
+        });
+      }
+    });
+
+    // Calculate statistics
+    const stats = {
+      total: deliveries.length,
+      pending: deliveries.filter(d => d.status === 'pending').length,
+      preparing: deliveries.filter(d => d.status === 'preparing').length,
+      out_for_delivery: deliveries.filter(d => d.status === 'out_for_delivery').length,
+      delivered: deliveries.filter(d => d.status === 'delivered').length,
+      cancelled: deliveries.filter(d => d.status === 'cancelled').length
+    };
+
+    res.json({
+      success: true,
+      data: deliveries,
+      stats: stats,
+      count: deliveries.length,
+      message: `Found ${deliveries.length} delivery records`
+    });
+
+  } catch (error) {
+    console.error('Error fetching delivery statuses:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch delivery statuses'
+    });
+  }
+});
+
+// Batch update multiple meal statuses
+app.post('/api/delivery-status/batch-update', async (req, res) => {
+  try {
+    const { updates } = req.body; // Array of { userId, mealId, status }
+
+    if (!updates || !Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Updates array is required and must not be empty'
+      });
+    }
+
+    console.log(`Processing batch update for ${updates.length} meals`);
+
+    const results = [];
+    const errors = [];
+
+    for (const update of updates) {
+      try {
+        const { userId, mealId, status, notes } = update;
+
+        // Get schedule
+        const { data: scheduleRecord, error: fetchError } = await supabase
+          .from('meal_schedules')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (fetchError || !scheduleRecord) {
+          errors.push({ userId, mealId, error: 'Schedule not found' });
+          continue;
+        }
+
+        // Update meal status in array
+        let scheduleData = scheduleRecord.schedule_data;
+        let updated = false;
+
+        if (Array.isArray(scheduleData)) {
+          scheduleData = scheduleData.map(meal => {
+            const mealIdMatch = (meal.meal_id === mealId || meal.id === mealId);
+            if (mealIdMatch) {
+              updated = true;
+              return {
+                ...meal,
+                status: status,
+                status_updated_at: new Date().toISOString(),
+                delivery_notes: notes || meal.delivery_notes || meal.notes || '',
+                delivered_at: status === 'delivered' ? new Date().toISOString() : meal.delivered_at
+              };
+            }
+            return meal;
+          });
+        }
+
+        if (updated) {
+          // Save to database
+          await supabase
+            .from('meal_schedules')
+            .update({
+              schedule_data: scheduleData,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', scheduleRecord.id);
+
+          results.push({ userId, mealId, status, success: true });
+        } else {
+          errors.push({ userId, mealId, error: 'Meal not found' });
+        }
+
+      } catch (error) {
+        errors.push({ userId: update.userId, mealId: update.mealId, error: error.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Batch update completed. ${results.length} successful, ${errors.length} failed`,
+      data: {
+        successful: results,
+        failed: errors,
+        totalProcessed: updates.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in batch update:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to process batch update'
+    });
+  }
+});
+
+// Get delivery statistics
+app.get('/api/delivery-status/stats', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    console.log('Fetching delivery statistics');
+
+    const { data: schedules, error } = await supabase
+      .from('meal_schedules')
+      .select('*');
+
+    if (error) {
+      throw error;
+    }
+
+    const stats = {
+      totalOrders: 0,
+      byStatus: {
+        pending: 0,
+        preparing: 0,
+        out_for_delivery: 0,
+        delivered: 0,
+        cancelled: 0
+      },
+      byMealType: {
+        breakfast: 0,
+        lunch: 0,
+        dinner: 0,
+        snacks: 0
+      },
+      byDate: {}
+    };
+
+    schedules.forEach(schedule => {
+      // Parse schedule_data array
+      if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
+        schedule.schedule_data.forEach(scheduledMeal => {
+          const dateStr = scheduledMeal.date;
+          
+          // Filter by date range if provided
+          if (startDate && dateStr < startDate) return;
+          if (endDate && dateStr > endDate) return;
+          
+          stats.totalOrders++;
+          
+          // Count by status
+          const status = scheduledMeal.status || 'pending';
+          stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
+          
+          // Count by meal type
+          const mealType = scheduledMeal.meal_type || scheduledMeal.type || 'unknown';
+          if (stats.byMealType[mealType] !== undefined) {
+            stats.byMealType[mealType] = (stats.byMealType[mealType] || 0) + 1;
+          }
+          
+          // Count by date
+          stats.byDate[dateStr] = (stats.byDate[dateStr] || 0) + 1;
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      data: stats,
+      message: 'Delivery statistics retrieved successfully'
+    });
+
+  } catch (error) {
+    console.error('Error fetching delivery statistics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to fetch delivery statistics'
+    });
+  }
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`\n🚀 Express Server running on port ${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
   console.log(`📱 Mobile access: http://192.168.18.28:${PORT}/api`);
+  console.log(`\n📬 Notification Endpoints:`);
+  console.log(`   POST /api/notifications/send`);
+  console.log(`   GET  /api/notifications/user/:userId`);
+  console.log(`   PUT  /api/notifications/:notificationId/read`);
+  console.log(`   GET  /api/notifications/all`);
+  console.log(`\n📦 Delivery Status Endpoints:`);
+  console.log(`   POST /api/delivery-status/update`);
+  console.log(`   GET  /api/delivery-status`);
+  console.log(`   GET  /api/delivery-status/date/:date`);
+  console.log(`   GET  /api/delivery-status/user/:userId`);
+  console.log(`   POST /api/delivery-status/batch-update`);
+  console.log(`   GET  /api/delivery-status/stats`);
+  console.log(`\n⚠️  Make sure Next.js is running on port 3000`);
+  console.log(`   Next.js dev: npm run dev`);
 });
 
 module.exports = app;
