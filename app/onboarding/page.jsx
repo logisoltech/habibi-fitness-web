@@ -19,7 +19,6 @@ export default function OnboardingPage() {
   // Personal details states
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
-  const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
   const [address, setAddress] = useState('');
   const [activityLevel, setActivityLevel] = useState('Moderate');
@@ -72,7 +71,7 @@ export default function OnboardingPage() {
   };
 
   const isFormValid = () => {
-    return name.trim() && age.trim() && phone.trim() && gender && address.trim() && activityLevel;
+    return name.trim() && age.trim() && gender && address.trim() && activityLevel;
   };
 
   const handleSubmit = () => {
@@ -85,7 +84,6 @@ export default function OnboardingPage() {
       heightUnit,
       name,
       age: parseInt(age),
-      phone,
       gender,
       address,
       activityLevel
@@ -278,20 +276,6 @@ export default function OnboardingPage() {
                     placeholder="e.g. 25"
                     value={age}
                     onChange={(e) => setAge(e.target.value)}
-                    className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#07da63] focus:border-transparent transition-all"
-                  />
-                </div>
-
-                {/* Phone Input */}
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="e.g. +1 549 000 0000"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
                     className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#07da63] focus:border-transparent transition-all"
                   />
                 </div>
