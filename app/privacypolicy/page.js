@@ -1,11 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const MAIN = "#18BD0F";
 const HEADING = "#74EB6E";
 
 export default function PrivacyPolicy() {
+  const [currentDate, setCurrentDate] = useState("");
+  const [currentYear, setCurrentYear] = useState("");
+
+  useEffect(() => {
+    setCurrentDate(
+      new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    );
+    setCurrentYear(new Date().getFullYear().toString());
+  }, []);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header Section */}
@@ -39,11 +54,7 @@ export default function PrivacyPolicy() {
             Privacy Policy
           </h1>
           <p className="text-lg text-white/90">
-            Last Updated: {new Date().toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+            Last Updated: {currentDate || "October 10, 2025"}
           </p>
         </div>
       </div>
@@ -129,8 +140,8 @@ export default function PrivacyPolicy() {
                   </span>
                   <span className="text-gray-700">
                     {" "}
-                    When you submit a transformation, you upload "Before" and
-                    "After" photos from your device's media library. These are
+                    When you submit a transformation, you upload &quot;Before&quot; and
+                    &quot;After&quot; photos from your device&apos;s media library. These are
                     stored only for the purpose of featuring your success story,
                     with your explicit consent.
                   </span>
@@ -169,7 +180,7 @@ export default function PrivacyPolicy() {
                 </h4>
                 <p className="text-gray-700 text-sm">
                   This permission is required to allow you to select and upload
-                  your transformation photos from your device's photo
+                  your transformation photos from your device&apos;s photo
                   gallery/media library.
                 </p>
               </div>
@@ -191,7 +202,7 @@ export default function PrivacyPolicy() {
                   Although this application does not contain features that
                   directly use the camera, this permission may be present due to
                   third-party software dependencies. We do not actively record,
-                  transmit, or store any images or video from your device's
+                  transmit, or store any images or video from your device&apos;s
                   camera.
                 </p>
               </div>
@@ -440,7 +451,7 @@ export default function PrivacyPolicy() {
       <div className="bg-gray-900 text-white py-8">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <p className="text-gray-400">
-            © {new Date().getFullYear()} Habibi Fitness. All rights reserved.
+            © {currentYear || "2025"} Habibi Fitness. All rights reserved.
           </p>
         </div>
       </div>
