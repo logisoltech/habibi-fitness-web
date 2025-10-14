@@ -65,7 +65,7 @@ const Dashboard = () => {
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-2xl p-6 text-white">
         <h2 className="text-2xl font-bold mb-2">Hello, Admin! 👋</h2>
-        <p className="text-green-100">Here's what's happening with your platform today.</p>
+        <p className="text-green-100">Here&apos;s what&apos;s happening with your platform today.</p>
       </div>
 
       {/* Stats Grid */}
