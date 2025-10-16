@@ -17,7 +17,7 @@ export async function GET(req) {
     }
 
     let query = supabase
-      .from("meals_first_tag")
+      .from("meals")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -27,7 +27,7 @@ export async function GET(req) {
 
     if (dietaryTags) {
       const trimmedTag = dietaryTags.trim();
-      query = query.eq("first_dietary_tag", trimmedTag);
+      query = query.contains("dietary_tags", [trimmedTag]);
     }
 
     query = query.range(offset, offset + limit - 1);
@@ -37,14 +37,16 @@ export async function GET(req) {
     if (mealsError) {
       console.error("Database error:", mealsError);
       return NextResponse.json(
-        { error: "Failed to fetch meals" },
+        { error: `Failed to fetch meals: ${mealsError.message}` },
         { status: 500 }
       );
     }
 
-    // Count from the same VIEW for consistency
+    console.log("Meals fetched successfully:", meals?.length || 0, "meals");
+
+    // Count from the same table for consistency
     let countQuery = supabase
-      .from("meals_first_tag")
+      .from("meals")
       .select("*", { count: "exact", head: true });
 
     if (category) {
@@ -53,7 +55,7 @@ export async function GET(req) {
 
     if (dietaryTags) {
       const trimmedTag = dietaryTags.trim();
-      countQuery = countQuery.eq("first_dietary_tag", trimmedTag);
+      countQuery = countQuery.contains("dietary_tags", [trimmedTag]);
     }
 
     const { count, error: countError } = await countQuery;
