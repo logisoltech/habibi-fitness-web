@@ -2,7 +2,7 @@
 // These functions interact with the server.js endpoints
 
 // Base API URL - update this for production
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
 
 /**
  * Update the status of a specific meal for a user

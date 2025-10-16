@@ -27,7 +27,7 @@ const NotificationBell = ({ userId }) => {
   const fetchNotifications = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`http://localhost:3001/api/notifications/user/${userId}`)
+      const response = await fetch(`http://localhost:5000/api/notifications/user/${userId}`)
       const data = await response.json()
 
       if (data.success) {
@@ -43,7 +43,7 @@ const NotificationBell = ({ userId }) => {
 
   const markAsRead = async (notificationId) => {
     try {
-      await fetch(`http://localhost:3001/api/notifications/${notificationId}/read`, {
+      await fetch(`http://localhost:5000/api/notifications/${notificationId}/read`, {
         method: 'PUT'
       })
       

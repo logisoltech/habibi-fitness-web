@@ -67,7 +67,6 @@ export default function Header() {
     localStorage.removeItem("user_data");
     setUser(null);
     setIsAuth(false);
-    // Redirect to home page after logout
     window.location.href = "/";
   };
 

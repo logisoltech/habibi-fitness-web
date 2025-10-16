@@ -23,6 +23,15 @@ export default function Login() {
   const router = useRouter();
   const { login, loading, error, clearError } = useAuth();
 
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('user_data') : null
+
+  useEffect(() => {
+    if (userId) {
+      router.push('/dashboard')
+      return
+    }
+  })
+
   useEffect(() => {
     // Trigger entrance animation
     setIsLoaded(true);
@@ -41,12 +50,10 @@ export default function Login() {
     const handleScroll = () => {
       const scrollY = window.scrollY;
       if (leaf1Ref.current && leaf2Ref.current) {
-        leaf1Ref.current.style.transform = `translateY(${
-          scrollY * 0.5
-        }px) rotate(${scrollY * 0.1}deg)`;
-        leaf2Ref.current.style.transform = `translateY(${
-          scrollY * -0.3
-        }px) rotate(${180 + scrollY * -0.1}deg)`;
+        leaf1Ref.current.style.transform = `translateY(${scrollY * 0.5
+          }px) rotate(${scrollY * 0.1}deg)`;
+        leaf2Ref.current.style.transform = `translateY(${scrollY * -0.3
+          }px) rotate(${180 + scrollY * -0.1}deg)`;
       }
     };
 
@@ -109,7 +116,7 @@ export default function Login() {
       // Use server.js API directly instead of Next.js API
       const response = await fetch(
         "http://localhost:5000/api/users/phone/" +
-          encodeURIComponent(phoneNumber),
+        encodeURIComponent(phoneNumber),
         {
           method: "GET",
           headers: {
@@ -165,13 +172,12 @@ export default function Login() {
         {/* Animated Leaf 01 - Top Right with Parallax */}
         <div
           ref={leaf1Ref}
-          className={`absolute top-20 right-20 z-20 transition-all duration-1000 ease-out ${
-            isLoaded && !isTransitioning
+          className={`absolute top-20 right-20 z-20 transition-all duration-1000 ease-out ${isLoaded && !isTransitioning
               ? "translate-x-0 translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-x-[-200px] translate-y-[-100px] opacity-0 scale-75 rotate-45"
-              : "translate-x-[100px] translate-y-[-50px] opacity-0 scale-75"
-          }`}
+                ? "translate-x-[-200px] translate-y-[-100px] opacity-0 scale-75 rotate-45"
+                : "translate-x-[100px] translate-y-[-50px] opacity-0 scale-75"
+            }`}
           style={{
             ...getParallaxStyle(1.5),
             animation: isLoaded ? "floatLeaf1 6s ease-in-out infinite" : "none",
@@ -188,22 +194,20 @@ export default function Login() {
 
         {/* Animated Glass Panel */}
         <div
-          className={`w-full max-w-xl rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xs shadow-[0_20px_90px_-20px_rgba(0,0,0,.6)] transition-all duration-700 ease-out transform z-10 ${
-            isLoaded && !isTransitioning
+          className={`w-full max-w-xl rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xs shadow-[0_20px_90px_-20px_rgba(0,0,0,.6)] transition-all duration-700 ease-out transform z-10 ${isLoaded && !isTransitioning
               ? "translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-y-8 opacity-0 scale-95"
-              : "translate-y-8 opacity-0 scale-95"
-          }`}
+                ? "translate-y-8 opacity-0 scale-95"
+                : "translate-y-8 opacity-0 scale-95"
+            }`}
         >
           <div className="px-8 py-10 md:px-12 md:py-12 text-white">
             {/* Animated Logo */}
             <div
-              className={`flex items-center justify-center mb-8 transition-all duration-500 delay-200 ${
-                isLoaded
+              className={`flex items-center justify-center mb-8 transition-all duration-500 delay-200 ${isLoaded
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
-              }`}
+                }`}
             >
               <img
                 src="/images/logo-white.png"
@@ -215,11 +219,10 @@ export default function Login() {
             {/* Error Message */}
             {(submitError || error) && (
               <div
-                className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${
-                  isLoaded
+                className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${isLoaded
                     ? "translate-y-0 opacity-100"
                     : "translate-y-4 opacity-0"
-                }`}
+                  }`}
               >
                 {submitError || error}
               </div>
@@ -228,11 +231,10 @@ export default function Login() {
             {/* Animated Form */}
             <form
               onSubmit={handleSubmit}
-              className={`space-y-5 md:space-y-6 transition-all duration-500 delay-300 ${
-                isLoaded
+              className={`space-y-5 md:space-y-6 transition-all duration-500 delay-300 ${isLoaded
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
-              }`}
+                }`}
             >
               <div className="relative">
                 <label htmlFor="phone" className="sr-only">
@@ -272,11 +274,10 @@ export default function Login() {
 
             {/* Animated Footer text */}
             <p
-              className={`mt-7 text-center text-sm text-white/90 transition-all duration-500 delay-400 ${
-                isLoaded
+              className={`mt-7 text-center text-sm text-white/90 transition-all duration-500 delay-400 ${isLoaded
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
-              }`}
+                }`}
             >
               Don't have an account?{" "}
               <Link
@@ -294,13 +295,12 @@ export default function Login() {
         {/* Animated Leaf 02 - Bottom Left with Parallax */}
         <div
           ref={leaf2Ref}
-          className={`absolute bottom-20 left-20 z-20 transition-all duration-1000 ease-out ${
-            isLoaded && !isTransitioning
+          className={`absolute bottom-20 left-20 z-20 transition-all duration-1000 ease-out ${isLoaded && !isTransitioning
               ? "translate-x-0 translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-x-[200px] translate-y-[100px] opacity-0 scale-75 rotate-[225deg]"
-              : "translate-x-[-100px] translate-y-[50px] opacity-0 scale-75"
-          }`}
+                ? "translate-x-[200px] translate-y-[100px] opacity-0 scale-75 rotate-[225deg]"
+                : "translate-x-[-100px] translate-y-[50px] opacity-0 scale-75"
+            }`}
           style={{
             ...getParallaxStyle(1.2, true),
             animation: isLoaded ? "floatLeaf2 8s ease-in-out infinite" : "none",
@@ -317,9 +317,8 @@ export default function Login() {
 
         {/* Additional floating leaves for ambiance */}
         <div
-          className={`absolute top-1/3 left-10 z-5 transition-all duration-1500 delay-500 ${
-            isLoaded ? "opacity-60" : "opacity-0"
-          }`}
+          className={`absolute top-1/3 left-10 z-5 transition-all duration-1500 delay-500 ${isLoaded ? "opacity-60" : "opacity-0"
+            }`}
           style={{
             ...getParallaxStyle(0.8),
             animation: isLoaded
@@ -337,9 +336,8 @@ export default function Login() {
         </div>
 
         <div
-          className={`absolute bottom-1/3 right-10 z-5 transition-all duration-1500 delay-700 ${
-            isLoaded ? "opacity-40" : "opacity-0"
-          }`}
+          className={`absolute bottom-1/3 right-10 z-5 transition-all duration-1500 delay-700 ${isLoaded ? "opacity-40" : "opacity-0"
+            }`}
           style={{
             ...getParallaxStyle(1.0, true),
             animation: isLoaded

@@ -15,28 +15,55 @@ const NotificationsPage = () => {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all') // 'all', 'unread', 'read'
   
-  // Get user ID from your auth context
-  // Replace this with your actual user context
-  const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+  // Get user ID from localStorage
+  const [userId, setUserId] = useState(null)
 
   useEffect(() => {
-    if (!userId) {
-      // Redirect to login if not authenticated
-      router.push('/auth/login')
-      return
+    // Parse user data from localStorage
+    if (typeof window !== 'undefined') {
+      const userDataString = localStorage.getItem('user_data')
+      if (userDataString) {
+        try {
+          const userData = JSON.parse(userDataString)
+          setUserId(userData.id)
+        } catch (error) {
+          console.error('Error parsing user data:', error)
+          router.push('/auth/login')
+        }
+      } else {
+        // No user data - redirect to login
+        router.push('/auth/login')
+      }
     }
-    
-    fetchNotifications()
+  }, [router])
+
+  useEffect(() => {
+    if (userId) {
+      fetchNotifications()
+    }
   }, [userId, filter])
 
   const fetchNotifications = async () => {
     try {
       setLoading(true)
-      const url = filter === 'unread' 
-        ? `http://localhost:3001/api/notifications/user/${userId}?unreadOnly=true`
-        : `http://localhost:3001/api/notifications/user/${userId}`
       
+      if (!userId) {
+        console.warn('No user ID available')
+        setLoading(false)
+        return
+      }
+
+      const url = filter === 'unread' 
+        ? `http://localhost:5000/api/notifications/user/${userId}?unreadOnly=true`
+        : `http://localhost:5000/api/notifications/user/${userId}`
+      
+      console.log('Fetching notifications from:', url)
       const response = await fetch(url)
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
 
       if (data.success) {
@@ -44,9 +71,13 @@ const NotificationsPage = () => {
           ? (data.data || []).filter(n => n.read)
           : data.data || []
         setNotifications(filteredData)
+      } else {
+        console.error('API returned error:', data.message)
+        setNotifications([])
       }
     } catch (error) {
       console.error('Error fetching notifications:', error)
+      setNotifications([])
     } finally {
       setLoading(false)
     }
@@ -54,7 +85,7 @@ const NotificationsPage = () => {
 
   const markAsRead = async (notificationId) => {
     try {
-      await fetch(`http://localhost:3001/api/notifications/${notificationId}/read`, {
+      await fetch(`http://localhost:5000/api/notifications/${notificationId}/read`, {
         method: 'PUT'
       })
       

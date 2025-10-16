@@ -20,7 +20,7 @@ const NotificationsHistory = () => {
   const fetchNotifications = async () => {
     try {
       setLoading(true)
-      const response = await fetch('http://localhost:3001/api/notifications/all?limit=100')
+      const response = await fetch('http://localhost:5000/api/notifications/all?limit=100')
       const data = await response.json()
 
       if (data.success) {
