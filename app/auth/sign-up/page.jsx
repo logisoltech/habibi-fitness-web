@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Header from "../../components/Header";
 import Image from "next/image";
 import { useAuth } from "../../contexts/AuthContext";
+import { useUserData } from "../../contexts/UserDataContext";
 
 export default function Signup() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -23,6 +24,7 @@ export default function Signup() {
   const leaf3Ref = useRef(null);
   const router = useRouter();
   const { signUp, loading, error, clearError } = useAuth();
+  const { updatePhone, updateName, checkUserExists, loadUserData } = useUserData();
 
   useEffect(() => {
     // Trigger entrance animation with leaves coming from login page
@@ -92,9 +94,38 @@ export default function Signup() {
     if (error) clearError();
   };
 
+  // OLD SIGN UP WITH OTP VERIFICATION - COMMENTED OUT
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   
+  //   if (!formData.phone || !formData.fullName) {
+  //     setSubmitError("Please fill in all fields");
+  //     return;
+  //   }
+  //
+  //   setIsSubmitting(true);
+  //   setSubmitError("");
+  //
+  //   try {
+  //     const result = await signUp(formData.phone, formData.fullName);
+  //     
+  //     // Store phone number for OTP verification
+  //     sessionStorage.setItem('signup_phone', formData.phone);
+  //     sessionStorage.setItem('signup_fullName', formData.fullName);
+  //     
+  //     // Navigate to OTP verification page
+  //     router.push('/auth/verify-otp');
+  //   } catch (error) {
+  //     setSubmitError(error.message);
+  //   } finally {
+  //     setIsSubmitting(false);
+  //   }
+  // };
+
+  // NEW REGISTRATION FLOW - Navigate to onboarding
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.phone || !formData.fullName) {
       setSubmitError("Please fill in all fields");
       return;
@@ -104,16 +135,35 @@ export default function Signup() {
     setSubmitError("");
 
     try {
-      const result = await signUp(formData.phone, formData.fullName);
-      
-      // Store phone number for OTP verification
+      // Check if user already exists
+      const userCheck = await checkUserExists(formData.phone);
+
+      if (userCheck.exists) {
+        // User exists - load their data and go to dashboard
+        loadUserData(userCheck.user);
+        
+        // Save user data to localStorage for Header authentication
+        localStorage.setItem('user_data', JSON.stringify(userCheck.user));
+        
+        setSubmitError("Account already exists! Redirecting to dashboard...");
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 1500);
+        return;
+      }
+
+      // New user - save phone and name to context
+      updatePhone(formData.phone);
+      updateName(formData.fullName);
+
+      // Store in session as backup
       sessionStorage.setItem('signup_phone', formData.phone);
       sessionStorage.setItem('signup_fullName', formData.fullName);
-      
-      // Navigate to OTP verification page
-      router.push('/auth/verify-otp');
+
+      // Navigate to onboarding page to continue registration
+      router.push('/onboarding');
     } catch (error) {
-      setSubmitError(error.message);
+      setSubmitError(error.message || "An error occurred. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -146,13 +196,12 @@ export default function Signup() {
         {/* Animated Leaf 01 - Top Left with Enhanced Parallax */}
         <div
           ref={leaf1Ref}
-          className={`absolute top-36 left-16 z-20 transition-all duration-1200 ease-out ${
-            isLoaded && !isTransitioning
+          className={`absolute top-36 left-16 z-20 transition-all duration-1200 ease-out ${isLoaded && !isTransitioning
               ? "translate-x-0 translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-x-[200px] translate-y-[-100px] opacity-0 scale-70 rotate-[-45deg]"
-              : "translate-x-[-150px] translate-y-[-80px] opacity-0 scale-80"
-          }`}
+                ? "translate-x-[200px] translate-y-[-100px] opacity-0 scale-70 rotate-[-45deg]"
+                : "translate-x-[-150px] translate-y-[-80px] opacity-0 scale-80"
+            }`}
           style={{
             ...getParallaxStyle(1.8),
             animation: isLoaded ? 'floatSignupLeaf1 7s ease-in-out infinite' : 'none',
@@ -169,22 +218,20 @@ export default function Signup() {
 
         {/* Animated Glass Panel with Enhanced Parallax */}
         <div
-          className={`w-full max-w-xl rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xs shadow-[0_20px_90px_-20px_rgba(0,0,0,.6)] transition-all duration-700 ease-out transform z-10 ${
-            isLoaded && !isTransitioning
+          className={`mt-10 w-full max-w-xl rounded-2xl border border-white/20 bg-white/10 backdrop-blur-xs shadow-[0_20px_90px_-20px_rgba(0,0,0,.6)] transition-all duration-700 ease-out transform z-10 ${isLoaded && !isTransitioning
               ? "translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-y-8 opacity-0 scale-95"
-              : "translate-y-8 opacity-0 scale-95"
-          }`}
+                ? "translate-y-8 opacity-0 scale-95"
+                : "translate-y-8 opacity-0 scale-95"
+            }`}
         >
-          <div className="px-8 py-10 md:px-12 md:py-12 text-white">
+          <div className="px-4 py-4 md:px-8 text-white">
             {/* Animated Logo */}
             <div
-              className={`flex items-center justify-center mb-8 transition-all duration-500 delay-200 ${
-                isLoaded
+              className={`flex items-center justify-center mb-8 transition-all duration-500 delay-200 ${isLoaded
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
-              }`}
+                }`}
             >
               <img
                 src="/images/logo-white.png"
@@ -195,9 +242,8 @@ export default function Signup() {
 
             {/* Error Message */}
             {(submitError || error) && (
-              <div className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${
-                isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-              }`}>
+              <div className={`mb-4 p-3 rounded-lg bg-red-500/20 border border-red-500/30 text-red-200 text-sm transition-all duration-500 delay-200 ${isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+                }`}>
                 {submitError || error}
               </div>
             )}
@@ -205,11 +251,10 @@ export default function Signup() {
             {/* Animated Form */}
             <form
               onSubmit={handleSubmit}
-              className={`space-y-5 md:space-y-6 transition-all duration-500 delay-300 ${
-                isLoaded
+              className={`space-y-5 md:space-y-6 transition-all duration-500 delay-300 ${isLoaded
                   ? "translate-y-0 opacity-100"
                   : "translate-y-4 opacity-0"
-              }`}
+                }`}
             >
               {/* Phone Number Input */}
               <div className="relative">
@@ -229,9 +274,8 @@ export default function Signup() {
               </div>
 
               {/* Full Name Input with staggered animation */}
-              <div className={`relative transition-all duration-500 delay-100 ${
-                isLoaded ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0"
-              }`}>
+              <div className={`relative transition-all duration-500 delay-100 ${isLoaded ? "translate-x-0 opacity-100" : "translate-x-4 opacity-0"
+                }`}>
                 <label htmlFor="full_name" className="sr-only">
                   Full Name
                 </label>
@@ -267,9 +311,8 @@ export default function Signup() {
             </form>
 
             {/* Animated Footer text */}
-            <p className={`mt-7 text-center text-sm text-white/90 transition-all duration-500 delay-500 ${
-              isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-            }`}>
+            <p className={`mt-7 text-center text-sm text-white/90 transition-all duration-500 delay-500 ${isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+              }`}>
               Already have an account?{" "}
               <Link
                 href="/auth/login"
@@ -286,13 +329,12 @@ export default function Signup() {
         {/* Animated Leaf 02 - Bottom Right with Enhanced Parallax */}
         <div
           ref={leaf2Ref}
-          className={`absolute bottom-16 right-16 z-20 transition-all duration-1400 ease-out ${
-            isLoaded && !isTransitioning
+          className={`absolute bottom-16 right-16 z-20 transition-all duration-1400 ease-out ${isLoaded && !isTransitioning
               ? "translate-x-0 translate-y-0 opacity-100 scale-100"
               : isTransitioning
-              ? "translate-x-[-200px] translate-y-[100px] opacity-0 scale-70 rotate-[135deg]"
-              : "translate-x-[150px] translate-y-[80px] opacity-0 scale-80"
-          }`}
+                ? "translate-x-[-200px] translate-y-[100px] opacity-0 scale-70 rotate-[135deg]"
+                : "translate-x-[150px] translate-y-[80px] opacity-0 scale-80"
+            }`}
           style={{
             ...getParallaxStyle(1.5, true),
             animation: isLoaded ? 'floatSignupLeaf2 9s ease-in-out infinite' : 'none',
@@ -310,13 +352,12 @@ export default function Signup() {
         {/* Animated Leaf 03 - Center Top with Unique Animation */}
         <div
           ref={leaf3Ref}
-          className={`absolute top-10 left-1/2 transform -translate-x-1/2 z-15 transition-all duration-1600 ease-out ${
-            isLoaded && !isTransitioning
+          className={`absolute top-10 left-1/2 transform -translate-x-1/2 z-15 transition-all duration-1600 ease-out ${isLoaded && !isTransitioning
               ? "translate-y-0 opacity-70 scale-100"
               : isTransitioning
-              ? "translate-y-[-200px] opacity-0 scale-50 rotate-[270deg]"
-              : "translate-y-[-100px] opacity-0 scale-60"
-          }`}
+                ? "translate-y-[-200px] opacity-0 scale-50 rotate-[270deg]"
+                : "translate-y-[-100px] opacity-0 scale-60"
+            }`}
           style={{
             ...getParallaxStyle(2.0),
             animation: isLoaded ? 'floatSignupLeaf3 11s ease-in-out infinite' : 'none',
@@ -333,9 +374,8 @@ export default function Signup() {
 
         {/* Additional ambient leaves */}
         <div
-          className={`absolute top-2/3 left-8 z-5 transition-all duration-2000 delay-600 ${
-            isLoaded ? "opacity-50" : "opacity-0"
-          }`}
+          className={`absolute top-2/3 left-8 z-5 transition-all duration-2000 delay-600 ${isLoaded ? "opacity-50" : "opacity-0"
+            }`}
           style={{
             ...getParallaxStyle(1.2),
             animation: isLoaded ? 'floatAmbient1 14s ease-in-out infinite' : 'none',
@@ -351,9 +391,8 @@ export default function Signup() {
         </div>
 
         <div
-          className={`absolute bottom-2/3 right-8 z-5 transition-all duration-2000 delay-800 ${
-            isLoaded ? "opacity-30" : "opacity-0"
-          }`}
+          className={`absolute bottom-2/3 right-8 z-5 transition-all duration-2000 delay-800 ${isLoaded ? "opacity-30" : "opacity-0"
+            }`}
           style={{
             ...getParallaxStyle(0.9, true),
             animation: isLoaded ? 'floatAmbient2 16s ease-in-out infinite' : 'none',

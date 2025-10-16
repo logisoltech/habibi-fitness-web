@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -2001,7 +2001,7 @@ app.get('/api/delivery-status/stats', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Express Server running on port ${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
-  console.log(`📱 Mobile access: http://192.168.18.28:${PORT}/api`);
+  console.log(`📱 Mobile access: http://192.168.0.1:${PORT}/api`);
   console.log(`\n📬 Notification Endpoints:`);
   console.log(`   POST /api/notifications/send`);
   console.log(`   GET  /api/notifications/user/:userId`);
@@ -2014,7 +2014,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /api/delivery-status/user/:userId`);
   console.log(`   POST /api/delivery-status/batch-update`);
   console.log(`   GET  /api/delivery-status/stats`);
-  console.log(`\n⚠️  Make sure Next.js is running on port 3000`);
+  console.log(`\n⚠️  Make sure Next.js is running on port 5000`);
   console.log(`   Next.js dev: npm run dev`);
 });
 

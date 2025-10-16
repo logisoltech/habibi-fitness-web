@@ -9,6 +9,7 @@ import Footer from "../components/Footer";
 import MealModal from "../components/MealModal";
 import { useUserData } from "../contexts/UserDataContext";
 import ApiService from "../services/api";
+import Link from "next/link";
 
 export default function UserMeals() {
   const { userData, filterMealsByAllergies } = useUserData();
@@ -77,8 +78,8 @@ export default function UserMeals() {
     
     if (!userMealTypes || userMealTypes.length === 0) {
       return [
-        { id: "lunch", name: "Lunch" },
-        { id: "dinner", name: "Dinner" },
+    { id: "lunch", name: "Lunch" },
+    { id: "dinner", name: "Dinner" },
       ]; // Default fallback
     }
 
@@ -474,9 +475,9 @@ export default function UserMeals() {
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-black mb-2">
-              What's the flavor today, Chef?
-            </h1>
+          <h1 className="text-4xl font-bold text-black mb-2">
+            What's the flavor today, Chef?
+          </h1>
             {subscriptionInfo && (
               <div className="text-sm text-gray-600">
                 <span className="font-semibold">
@@ -497,7 +498,8 @@ export default function UserMeals() {
               </div>
             )}
           </div>
-          <button
+          <Link
+            href="/meal-schedule"
             className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold transition-all duration-200
                 bg-green-500 text-white hover:bg-green-600 shadow-md hover:shadow-lg
             }`}
@@ -516,7 +518,7 @@ export default function UserMeals() {
               />
             </svg>
             Swap Meals
-          </button>
+          </Link>
         </div>
 
         {/* Filters Section */}
@@ -609,8 +611,8 @@ export default function UserMeals() {
                   <div className="p-4">
                     <div className="flex items-center justify-between mb-1">
                       <h3 className="font-bold text-lg text-black line-clamp-1 flex-1">
-                        {meal.name}
-                      </h3>
+                      {meal.name}
+                    </h3>
                       {meal.rating === 5 && (
                         <div className="flex items-center ml-2">
                           <span className="text-yellow-500 text-sm">★</span>
@@ -646,12 +648,12 @@ export default function UserMeals() {
         </div>
       </div>
       <Footer />
-
+      
       {/* Meal Modal */}
-      <MealModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        meal={selectedMeal}
+      <MealModal 
+        isOpen={isModalOpen} 
+        onClose={handleCloseModal} 
+        meal={selectedMeal} 
       />
     </>
   );

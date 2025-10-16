@@ -36,13 +36,6 @@ export default function Hero() {
             >
               See Our Menus
             </Link>
-            <Link
-              href="/onboarding"
-              className="inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 font-semibold border-2 shadow-lg transition hover:bg-white/10"
-              style={{ borderColor: MAIN, color: 'white' }}
-            >
-              Calculate BMI & TDEE
-            </Link>
           </div>
         </div>
       </div>

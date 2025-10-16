@@ -281,10 +281,6 @@ export default function Dashboard() {
     try {
       setUpdatingWeight(true);
       const userId = userData?.userId || userData?.id;
-      
-      if (!userId) {
-        throw new Error('User not found');
-      }
 
       // Update weight in database
       const response = await ApiService.updateUser(userId, {
@@ -944,7 +940,7 @@ export default function Dashboard() {
                   <div className="flex items-end">
                     <span className="text-3xl font-bold" style={{ color: bmiColor }}>{currentBMI}</span>
                     <span className="text-gray-400 ml-2 mb-1">Index</span>
-                  </div>
+                </div>
               </div>
             </div>
 

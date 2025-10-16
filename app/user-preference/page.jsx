@@ -8,11 +8,22 @@ import Footer from "../components/Footer";
 import { font } from "../components/font/font";
 
 import { useAuth } from "../contexts/AuthContext";
+import { useUserData } from "../contexts/UserDataContext";
 import { useRouter } from "next/navigation";
 
 export default function UserPreference() {
   const { user, apiCall, isAuthenticated } = useAuth();
   const router = useRouter();
+  const {
+    userData,
+    updatePlan,
+    updateMealCount,
+    updateMealTypes,
+    updateSelectedDays,
+    updateSubscription,
+    registerUser,
+    getBMIInfo,
+  } = useUserData();
 
   const [selectedMealTimes, setSelectedMealTimes] = useState([
     "lunch",
@@ -39,6 +50,16 @@ export default function UserPreference() {
   const [weekDayError, setWeekDayError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  // Map UI IDs to API plan names (matching the .md documentation)
+  const planMapping = {
+    "balanced": "Balanced",
+    "lowcarb": "Low Carb",
+    "protein": "Protein Boost",
+    "vegetarian": "Vegetarian Kitchen",
+    "chef": "Chef's Choice",
+    "keto": "Keto",
+  };
 
   const mealPreferences = [
     {
@@ -161,7 +182,10 @@ export default function UserPreference() {
 
   const handleMealPreferenceChange = (preferenceId) => {
     setSelectedMealPreference(preferenceId);
-    console.log("Meal Preference changed", preferenceId);
+    // Save to context with proper plan name
+    const planName = planMapping[preferenceId];
+    updatePlan(planName);
+    console.log("Meal Preference changed", preferenceId, "-> Plan:", planName);
   };
 
   // Calculate daily rate based on selected meals
@@ -206,7 +230,7 @@ export default function UserPreference() {
     }
   }, [selectedMealTimes.length, selectedWeekDays.length]);
 
-  // Handle form submission
+  // Handle form submission - REGISTER USER WITH ALL DATA
   const handleSubmit = async () => {
     if (!isFormValid()) {
       return;
@@ -216,22 +240,68 @@ export default function UserPreference() {
     setSubmitError("");
 
     try {
-      const data = await apiCall("/api/user-preference", {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: user.id,
-          meal_plan: selectedMealPreference,
-          meal_count: selectedMealTimes.length,
-          meals: selectedMealTimes.join(","),
-          days: selectedWeekDays,
-          payment_cycle: selectedPaymentCycle,
-        }),
-      });
+      // Prepare meal preferences data BEFORE updating context
+      const planName = planMapping[selectedMealPreference];
+      
+      // Convert selectedWeekDays to uppercase 3-letter format (MON, TUE, WED, etc.)
+      const daysMapping = {
+        'sunday': 'SUN',
+        'monday': 'MON',
+        'tuesday': 'TUE',
+        'wednesday': 'WED',
+        'thursday': 'THU',
+        'friday': 'FRI',
+        'saturday': 'SAT'
+      };
+      const formattedDays = selectedWeekDays.map(day => daysMapping[day] || day.toUpperCase());
 
-      window.location.href = "/dashboard";
+      // Update context with meal preferences (for future use)
+      updatePlan(planName);
+      updateMealCount(selectedMealTimes.length);
+      updateMealTypes(selectedMealTimes);
+      updateSelectedDays(formattedDays);
+      updateSubscription(selectedPaymentCycle);
+
+      // IMPORTANT: Use local values for registration since React state updates are async
+      // We need to pass these values directly to avoid null values
+      console.log("📋 Registration data prepared:");
+      console.log("  Plan:", planName);
+      console.log("  Meal Types:", selectedMealTimes);
+      console.log("  Selected Days:", formattedDays);
+      console.log("  Subscription:", selectedPaymentCycle);
+      console.log("  Current userData:", userData);
+      console.log("  BMI Info:", getBMIInfo());
+
+      // Create registration data with current values + local meal preferences
+      const registrationOverrides = {
+        plan: planName,
+        mealcount: selectedMealTimes.length,
+        mealtypes: selectedMealTimes,
+        selecteddays: formattedDays,
+        subscription: selectedPaymentCycle,
+      };
+
+      // Register user - this saves ALL data to database
+      console.log("Registering user with complete data...");
+      const result = await registerUser(registrationOverrides);
+
+      if (result.success) {
+        console.log("✅ User registered successfully!", result.user);
+        
+        // Save user data to localStorage for Header authentication
+        localStorage.setItem('user_data', JSON.stringify(result.user));
+        
+        // Show success message
+        alert("Registration successful! Redirecting to dashboard...");
+        
+        // Navigate to dashboard
+        router.push('/dashboard');
+      } else {
+        throw new Error(result.error || "Registration failed");
+      }
     } catch (error) {
-      console.error("Error saving preferences:", error);
-      setSubmitError(error.message);
+      console.error("❌ Error during registration:", error);
+      setSubmitError(error.message || "Failed to complete registration. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

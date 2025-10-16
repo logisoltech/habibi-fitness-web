@@ -125,7 +125,7 @@ export default function Login() {
         localStorage.setItem("user_data", JSON.stringify(result.data));
 
         // Navigate directly to home page
-        router.push("/home");
+        router.push("/dashboard");
       } else {
         setSubmitError(
           result.message || "User not found. Please sign up first."
