@@ -72,7 +72,7 @@ export default function Header() {
   };
 
   const nav = [
-    { href: "/", label: "Home" },
+    { href: "/dashboard", label: "Home" },
     { href: "/menu", label: "Menu" },
     { href: "/about", label: "About Us" },
     { href: "/contact", label: "Contact" },
@@ -80,6 +80,14 @@ export default function Header() {
 
   const isActive = (href) =>
     href === "/" ? pathname === "/" : pathname?.startsWith(href);
+
+  const handleHomeClick = (e) => {
+    if (!isAuthenticated()) {
+      e.preventDefault();
+      window.location.href = "/auth/login";
+    }
+    // If authenticated, let the normal link behavior proceed to /dashboard
+  };
 
   return (
     <div className="relative z-50">
@@ -138,6 +146,7 @@ export default function Header() {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={item.href === "/dashboard" ? handleHomeClick : undefined}
                   className={[
                     "px-3 py-2 rounded-full transition",
                     isActive(item.href)
@@ -269,7 +278,12 @@ export default function Header() {
               <li key={item.href}>
                 <Link
                   href={item.href}
-                  onClick={() => setOpen(false)}
+                  onClick={(e) => {
+                    if (item.href === "/dashboard") {
+                      handleHomeClick(e);
+                    }
+                    setOpen(false);
+                  }}
                   className={[
                     "block px-4 py-3 rounded-lg text-white",
                     isActive(item.href)
