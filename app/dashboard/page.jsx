@@ -114,6 +114,12 @@ export default function Dashboard() {
     fiber: 0
   });
 
+  // Meal planning state
+  const [selectedMealCategory, setSelectedMealCategory] = useState('breakfast');
+  const [userMealSchedule, setUserMealSchedule] = useState(null);
+  const [selectedDayMeals, setSelectedDayMeals] = useState({});
+  const [mealPlanLoading, setMealPlanLoading] = useState(true);
+
   const { user, isAuthenticated, logout } = useAuth();
   const { userData, loadUserData, getBMIInfo, updateWeight } = useUserData();
   const router = useRouter();
@@ -139,6 +145,109 @@ export default function Dashboard() {
 
   const macroTotals = calculateTotalMacros();
   const totalCalories = macroTotals.calories;
+
+  // Fetch user meal schedule
+  const fetchUserMealSchedule = async () => {
+    try {
+      setMealPlanLoading(true);
+      const userId = userData?.userId || userData?.id;
+      
+      console.log('🔍 DEBUG: Starting fetchUserMealSchedule');
+      console.log('🔍 DEBUG: userData:', userData);
+      console.log('🔍 DEBUG: userId:', userId);
+      
+      if (!userId) {
+        console.log('❌ No user ID found');
+        setMealPlanLoading(false);
+        return;
+      }
+
+      console.log('📡 Fetching meal schedule for user:', userId);
+
+      // First, try to get existing meal schedule
+      let result;
+      try {
+        console.log('🔍 Trying to get existing meal schedule...');
+        result = await ApiService.getMealSchedule(userId);
+        console.log('✅ Existing schedule found:', result);
+      } catch (scheduleError) {
+        console.log('⚠️ No existing schedule found, generating new one...');
+        console.log('🔍 Schedule error details:', scheduleError);
+        // Generate new meal schedule
+        result = await ApiService.generateMealSchedule(userId, 4);
+        console.log('✅ Generated new schedule:', result);
+      }
+
+      if (result && result.success) {
+        setUserMealSchedule(result.data);
+        console.log('🎉 Meal schedule loaded successfully:', result.data);
+      } else {
+        console.error('❌ Failed to load meal schedule:', result?.message || 'Unknown error');
+      }
+    } catch (error) {
+      console.error('💥 Error fetching meal schedule:', error);
+      console.error('💥 Error stack:', error.stack);
+    } finally {
+      setMealPlanLoading(false);
+    }
+  };
+
+  // Get meals for selected date and category
+  const getMealsForSelectedDay = (date, category) => {
+    console.log('🔍 getMealsForSelectedDay called with:', { date: date.format('YYYY-MM-DD'), category });
+    console.log('🔍 userMealSchedule:', userMealSchedule);
+    
+    if (!userMealSchedule?.weeks?.[0]) {
+      console.log('❌ No meal schedule weeks found');
+      return [];
+    }
+
+    const dayOfWeek = date.format('dddd').toLowerCase();
+    console.log('🔍 Looking for day:', dayOfWeek);
+    
+    const dayData = userMealSchedule.weeks[0].days[dayOfWeek];
+    console.log('🔍 Day data:', dayData);
+    console.log('🔍 Available meal keys:', Object.keys(dayData || {}));
+    
+    if (!dayData) {
+      console.log('❌ No day data found for:', dayOfWeek);
+      return [];
+    }
+
+    // Filter meals by category
+    const categoryMeals = [];
+    Object.keys(dayData).forEach(mealKey => {
+      const meal = dayData[mealKey];
+      console.log('🔍 Checking meal:', mealKey, meal);
+      console.log('🔍 Meal category:', meal?.category, 'Looking for:', category);
+      
+      // Check if meal matches category (either exact match or meal key contains category)
+      const isMatchingCategory = meal && (
+        meal.category === category || 
+        mealKey.toLowerCase().includes(category.toLowerCase()) ||
+        meal.meal_type === category
+      );
+      
+      if (isMatchingCategory) {
+        console.log('✅ Adding meal to category:', category);
+        categoryMeals.push({
+          id: meal.id,
+          name: meal.name,
+          image: meal.image_url || "/images/dashboard/meals/meal-1.png",
+          category: meal.category || meal.meal_type,
+          calories: meal.calories,
+          protein: meal.protein,
+          carbs: meal.carbs,
+          fats: meal.fat || meal.fats,
+          description: meal.description,
+          rating: meal.rating
+        });
+      }
+    });
+
+    console.log('✅ Found meals for', category, ':', categoryMeals);
+    return categoryMeals;
+  };
 
   // useEffect(() => {
   //   if (!isAuthenticated()) {
@@ -264,6 +373,24 @@ export default function Dashboard() {
 
     loadUserDataAndCalculateMacros();
   }, []); // Remove loadUserData dependency to prevent infinite re-renders
+
+  // Fetch meal schedule when user data is available
+  useEffect(() => {
+    if (userData?.userId || userData?.id) {
+      fetchUserMealSchedule();
+    }
+  }, [userData]);
+
+  // Update selected day meals when date or category changes
+  useEffect(() => {
+    if (userMealSchedule && selectedDate && selectedMealCategory) {
+      const meals = getMealsForSelectedDay(selectedDate, selectedMealCategory);
+      setSelectedDayMeals(prev => ({
+        ...prev,
+        [selectedMealCategory]: meals
+      }));
+    }
+  }, [userMealSchedule, selectedDate, selectedMealCategory]);
 
   // Handle weight update function
   const handleUpdateWeight = async () => {
@@ -1046,84 +1173,105 @@ export default function Dashboard() {
 
               {/* Meal Category Tabs */}
               <div className="flex gap-2 mb-6">
-                <button className="bg-green-500 text-white px-4 py-2 rounded-full text-sm font-medium">
-                  Breakfast
-                </button>
-                <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-300">
-                  Lunch
-                </button>
-                <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-300">
-                  Dinner
-                </button>
-                <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-300">
-                  Snacks
-                </button>
+                {['breakfast', 'lunch', 'dinner', 'snacks'].map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setSelectedMealCategory(category)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                      selectedMealCategory === category
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                  </button>
+                ))}
               </div>
 
               {/* Meals Carousel */}
-              <Carousel
-                responsive={responsive}
-                additionalTransfrom={0}
-                arrows
-                centerMode={false}
-                containerClass="container-with-dots"
-                draggable
-                infinite
-                keyBoardControl
-                minimumTouchDrag={80}
-                itemClass="px-2"
-                rtl={false}
-                shouldResetAutoplay
-                slidesToSlide={1}
-                swipeable
-                pauseOnHover={true}
-              >
-                {mealPlanData.map((meal) => (
-                  <div
-                    key={meal.id}
-                    className="bg-white rounded-xl overflow-hidden shadow-lg"
-                  >
-                    <div className="relative h-36">
-                      <Image
-                        src={meal.image}
-                        alt={meal.title}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="p-3">
-                      <h3 className="font-medium text-gray-900 text-sm mb-1">
-                        {meal.title}
-                      </h3>
-                      <div className="flex items-center justify-between">
-                        <span className="text-green-600 font-bold text-sm">
-                          {meal.price}
-                        </span>
-                        <button className="bg-green-500 text-white rounded-full p-1">
-                          <svg
-                            className="w-4 h-4"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                        </button>
+              {mealPlanLoading ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+                  <p className="ml-4 text-gray-600">Loading meals...</p>
+                </div>
+              ) : (
+                <Carousel
+                  responsive={responsive}
+                  additionalTransfrom={0}
+                  arrows
+                  centerMode={false}
+                  containerClass="container-with-dots"
+                  draggable
+                  infinite
+                  keyBoardControl
+                  minimumTouchDrag={80}
+                  itemClass="px-2"
+                  rtl={false}
+                  shouldResetAutoplay
+                  slidesToSlide={1}
+                  swipeable
+                  pauseOnHover={true}
+                >
+                  {selectedDayMeals[selectedMealCategory]?.length > 0 ? (
+                    selectedDayMeals[selectedMealCategory].map((meal) => (
+                      <div
+                        key={meal.id}
+                        className="bg-white rounded-xl overflow-hidden shadow-lg"
+                      >
+                        <div className="relative h-36">
+                          <Image
+                            src={meal.image}
+                            alt={meal.name}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                        <div className="p-3">
+                          <h3 className="font-medium text-gray-900 text-sm mb-1 line-clamp-1">
+                            {meal.name}
+                          </h3>
+                          <p className="text-xs text-gray-500 mb-2 line-clamp-2">
+                            {meal.description}
+                          </p>
+                          <div className="flex items-center justify-between mt-4 text-xs text-gray-500">
+                            <p><span className="text-green-500 font-bold">{meal.calories}</span> cal</p>
+                            <p><span className="text-green-500 font-bold">{meal.protein}g</span> protein</p>
+                          </div>
+                        </div>
                       </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full text-center py-16">
+                      <p className="text-gray-500 text-lg">
+                        No meals scheduled for {selectedMealCategory} on {selectedDate.format('MMMM DD')}
+                      </p>
                     </div>
-                  </div>
-                ))}
-              </Carousel>
+                  )}
+                </Carousel>
+              )}
 
               {/* Progress Bar */}
               <div className="mt-6">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-gray-600">Daily Progress</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {(() => {
+                      if (!userMealSchedule?.weeks?.[0]) return "0/4";
+                      const dayOfWeek = selectedDate.format('dddd').toLowerCase();
+                      const dayData = userMealSchedule.weeks[0].days[dayOfWeek];
+                      const totalMeals = dayData ? Object.keys(dayData).length : 0;
+                      // For now, assume 70% completion (you can implement actual completion tracking later)
+                      const completedMeals = Math.round(totalMeals * 0.7);
+                      return `${completedMeals}/${totalMeals}`;
+                    })()}
+                  </span>
+                </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{ width: "70%" }}
+                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                    style={{ 
+                      width: userMealSchedule?.weeks?.[0] ? "70%" : "0%" 
+                    }}
                   ></div>
                 </div>
               </div>
