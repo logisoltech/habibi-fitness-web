@@ -11,8 +11,8 @@ app.use(cors());
 app.use(express.json());
 
 // Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.SUPABASE_URL || "https://rvbfguamiityqlheqjnu.supabase.co";
+const supabaseKey = process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2YmZndWFtaXR5dXFsaGVxanVucSIsInJpZCI6InF1ZXJ5c3V6a29sbG1kIiwiZXhwIjoxNzI5MjY5OTk5fQ.Vf7i5YpZ346aLjV-o6h39CwGjZ3e6U0v8N7FhJ6uI4";
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Helper function to populate user_meals table with individual meal assignments
