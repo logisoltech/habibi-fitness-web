@@ -33,8 +33,8 @@ const NotificationsPage = () => {
     try {
       setLoading(true)
       const url = filter === 'unread' 
-        ? `http://localhost:3001/api/notifications/user/${userId}?unreadOnly=true`
-        : `http://localhost:3001/api/notifications/user/${userId}`
+        ? `https://habibi-fitness-server.onrender.com/api/notifications/user/${userId}?unreadOnly=true`
+        : `https://habibi-fitness-server.onrender.com/api/notifications/user/${userId}`
       
       const response = await fetch(url)
       const data = await response.json()
@@ -54,7 +54,7 @@ const NotificationsPage = () => {
 
   const markAsRead = async (notificationId) => {
     try {
-      await fetch(`http://localhost:3001/api/notifications/${notificationId}/read`, {
+      await fetch(`https://habibi-fitness-server.onrender.com/api/notifications/${notificationId}/read`, {
         method: 'PUT'
       })
       
