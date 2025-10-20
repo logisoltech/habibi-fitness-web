@@ -230,7 +230,7 @@ export default function UserPreference() {
     }
   }, [selectedMealTimes.length, selectedWeekDays.length]);
 
-  // Handle form submission - REGISTER USER WITH ALL DATA
+  // Handle form submission - REDIRECT TO STRIPE CHECKOUT
   const handleSubmit = async () => {
     if (!isFormValid()) {
       return;
@@ -240,7 +240,7 @@ export default function UserPreference() {
     setSubmitError("");
 
     try {
-      // Prepare meal preferences data BEFORE updating context
+      // Prepare meal preferences data
       const planName = planMapping[selectedMealPreference];
       
       // Convert selectedWeekDays to uppercase 3-letter format (MON, TUE, WED, etc.)
@@ -255,56 +255,67 @@ export default function UserPreference() {
       };
       const formattedDays = selectedWeekDays.map(day => daysMapping[day] || day.toUpperCase());
 
-      // Update context with meal preferences (for future use)
+      // Update context with meal preferences
       updatePlan(planName);
       updateMealCount(selectedMealTimes.length);
       updateMealTypes(selectedMealTimes);
       updateSelectedDays(formattedDays);
       updateSubscription(selectedPaymentCycle);
 
-      // IMPORTANT: Use local values for registration since React state updates are async
-      // We need to pass these values directly to avoid null values
-      console.log("📋 Registration data prepared:");
-      console.log("  Plan:", planName);
-      console.log("  Meal Types:", selectedMealTimes);
-      console.log("  Selected Days:", formattedDays);
-      console.log("  Subscription:", selectedPaymentCycle);
-      console.log("  Current userData:", userData);
-      console.log("  BMI Info:", getBMIInfo());
+      const bmiInfo = getBMIInfo();
 
-      // Create registration data with current values + local meal preferences
-      const registrationOverrides = {
+      // Prepare complete user data for Stripe metadata
+      const completeUserData = {
+        name: userData.name,
+        phone: userData.phone,
+        address: userData.address,
+        activity: userData.activity,
         plan: planName,
-        mealcount: selectedMealTimes.length,
+        goal: userData.goal,
+        weight: userData.weight.toString(),
+        height: userData.height.toString(),
+        age: userData.age?.toString(),
+        gender: userData.gender,
+        mealcount: selectedMealTimes.length.toString(),
         mealtypes: selectedMealTimes,
         selecteddays: formattedDays,
         subscription: selectedPaymentCycle,
+        bmi: bmiInfo.bmi.toString(),
+        tdee: bmiInfo.tdee?.toString() || '',
+        allergies: userData.allergies || [],
       };
 
-      // Register user - this saves ALL data to database
-      console.log("Registering user with complete data...");
-      const result = await registerUser(registrationOverrides);
+      console.log("🛒 Preparing Stripe checkout with data:", completeUserData);
 
-      if (result.success) {
-        console.log("✅ User registered successfully!", result.user);
-        
-        // Save user data to localStorage for Header authentication
-        localStorage.setItem('user_data', JSON.stringify(result.user));
-        
-        // Show success message
-        alert("Registration successful! Redirecting to dashboard...");
-        
-        // Navigate to dashboard
-        router.push('/dashboard');
+      // Create Stripe checkout session
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          paymentCycle: selectedPaymentCycle,
+          userEmail: userData.email || `${userData.phone}@habibi-fitness.com`,
+          userName: userData.name,
+          userData: completeUserData,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success && result.url) {
+        console.log("✅ Checkout session created, redirecting to Stripe...");
+        // Redirect to Stripe Checkout
+        window.location.href = result.url;
       } else {
-        throw new Error(result.error || "Registration failed");
+        throw new Error(result.error || "Failed to create checkout session");
       }
     } catch (error) {
-      console.error("❌ Error during registration:", error);
-      setSubmitError(error.message || "Failed to complete registration. Please try again.");
-    } finally {
+      console.error("❌ Error creating checkout session:", error);
+      setSubmitError(error.message || "Failed to proceed to payment. Please try again.");
       setIsSubmitting(false);
     }
+    // Note: Don't set setIsSubmitting(false) here because we're redirecting
   };
 
   // useEffect(() => {
@@ -633,13 +644,28 @@ export default function UserPreference() {
                 <button
                   onClick={handleSubmit}
                   disabled={!isFormValid() || isSubmitting}
-                  className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors ${
+                  className={`w-full font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center gap-2 ${
                     isFormValid() && !isSubmitting
                       ? "bg-green-500 hover:bg-green-600 text-white cursor-pointer"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
                 >
-                  {isSubmitting ? "Saving..." : "Continue"}
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Proceed to Payment</span>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
                 </button>
               </div>
             </div>

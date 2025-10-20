@@ -1,0 +1,42 @@
+===========================================
+  STRIPE ENVIRONMENT VARIABLES SETUP
+===========================================
+
+Copy the following into your .env.local file:
+
+-------------------------------------------
+
+# Stripe Configuration
+# Get these from: https://dashboard.stripe.com/test/apikeys
+STRIPE_SECRET_KEY=sk_test_your_secret_key_here
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_your_publishable_key_here
+
+# Stripe Webhook Secret
+# Get this from: https://dashboard.stripe.com/test/webhooks
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# Stripe Product Price IDs
+# Create products in Stripe Dashboard and copy the price IDs
+STRIPE_PRICE_WEEKLY=price_your_weekly_price_id
+STRIPE_PRICE_MONTHLY=price_your_monthly_price_id
+STRIPE_PRICE_QUARTERLY=price_your_quarterly_price_id
+
+# Application Domain
+# For local development
+NEXT_PUBLIC_DOMAIN=http://localhost:3000
+
+# Backend API URL (your Express server)
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+
+-------------------------------------------
+
+IMPORTANT NOTES:
+
+1. Replace all placeholder values with your actual Stripe keys
+2. Never commit .env.local to version control
+3. Add .env.local to your .gitignore file
+4. For production, use live keys and update domains
+
+See STRIPE_INTEGRATION_GUIDE.md for detailed setup instructions.
+
+
