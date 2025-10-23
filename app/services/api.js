@@ -1,4 +1,4 @@
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'https://habibi-fitness-server.onrender.com/api';
 
 class ApiService {
   static async request(endpoint, options = {}) {
@@ -144,6 +144,35 @@ class ApiService {
     return this.request('/schedule/swap-meals', {
       method: 'POST',
       body: JSON.stringify({ userId, sourceMeal, targetMeal }),
+    });
+  }
+
+  // Delivery Status API
+  static async getUserDeliveryStatus(userId, date = null, status = null) {
+    let url = `/delivery-status/user/${userId}`;
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (status) params.append('status', status);
+    if (params.toString()) url += `?${params.toString()}`;
+    
+    return this.request(url);
+  }
+
+  static async updateMealStatus(userId, mealId, status, date, mealType = '', notes = '', mealKey = '', weekIndex = null, dayKey = '') {
+    return this.request('/delivery-status/update', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId,
+        mealId,
+        status,
+        date,
+        mealType,
+        notes,
+        mealKey,
+        weekIndex,
+        dayKey,
+        timestamp: new Date().toISOString()
+      }),
     });
   }
 

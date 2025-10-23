@@ -6,7 +6,7 @@ import { fetchDeliveriesByDate, updateMealStatus } from '../utils/deliveryApi'
 
 const UpdateDeliveryStatus = () => {
   const { theme } = useTheme()
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }))
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [selectedUser, setSelectedUser] = useState(null)
@@ -40,23 +40,57 @@ const UpdateDeliveryStatus = () => {
       setLoading(true)
       setError(null)
       
-      const filters = {
-        userId: searchQuery.trim() // Search by user ID
-      }
-      if (statusFilter !== 'all') {
-        filters.status = statusFilter
+      const userId = searchQuery.trim()
+      console.log('🔍 CMS: Fetching meals for user:', userId, 'on date:', selectedDate)
+      console.log('🔍 CMS: Today\'s date:', new Date().toISOString().split('T')[0])
+      console.log('🔍 CMS: Selected date vs today:', selectedDate, 'vs', new Date().toISOString().split('T')[0])
+      
+      // First, get the user's meal schedule (same as dashboard)
+      const scheduleResponse = await fetch(`https://habibi-fitness-server.onrender.com/api/schedule/${userId}`)
+      const scheduleData = await scheduleResponse.json()
+      
+      console.log('🔍 CMS: Schedule response:', scheduleData)
+      
+      if (!scheduleData.success || !scheduleData.data) {
+        setError(`No meal schedule found for User ID: ${userId}`)
+        setDeliveries([])
+        return
       }
       
-      const response = await fetchDeliveriesByDate(selectedDate, filters)
+      // Get today's meals from schedule
+      const todayMeals = getTodaysMealsFromSchedule(scheduleData.data, selectedDate)
+      console.log('🔍 CMS: Today\'s meals from schedule:', todayMeals)
       
-      if (response.success) {
-        setDeliveries(response.data || [])
-        if (response.data.length === 0) {
-          setError(`No meals found for User ID: ${searchQuery}`)
+      if (todayMeals.length === 0) {
+        setError(`No meals scheduled for ${selectedDate}`)
+        setDeliveries([])
+        return
+      }
+      
+      // Now get delivery status to overlay
+      try {
+        const deliveryResponse = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${userId}?date=${selectedDate}`)
+        const deliveryData = await deliveryResponse.json()
+        
+        console.log('🔍 CMS: Delivery status response:', deliveryData)
+        
+        // Overlay delivery status on meals
+        const mealsWithStatus = overlayDeliveryStatusOnMeals(todayMeals, deliveryData.data?.meals || [])
+        console.log('🔍 CMS: Meals with status overlay:', mealsWithStatus)
+        
+        // Filter by status if needed
+        let filteredMeals = mealsWithStatus
+        if (statusFilter !== 'all') {
+          filteredMeals = mealsWithStatus.filter(meal => meal.status === statusFilter)
         }
-      } else {
-        setError('Failed to fetch deliveries')
+        
+        setDeliveries(filteredMeals)
+        
+      } catch (deliveryError) {
+        console.log('⚠️ CMS: No delivery status found, using default status')
+        setDeliveries(todayMeals.map(meal => ({ ...meal, status: 'pending' })))
       }
+      
     } catch (err) {
       console.error('Error fetching deliveries:', err)
       setError(err.message || 'Failed to fetch deliveries')
@@ -64,6 +98,74 @@ const UpdateDeliveryStatus = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Get today's meals from schedule data (same logic as dashboard)
+  const getTodaysMealsFromSchedule = (scheduleData, targetDate) => {
+    if (!scheduleData || !scheduleData.weeks || scheduleData.weeks.length === 0) {
+      return []
+    }
+
+    const currentWeek = scheduleData.weeks[0]
+    if (!currentWeek || !currentWeek.days) {
+      return []
+    }
+
+    // Get target date's day name
+    const date = new Date(targetDate)
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+    const dayName = dayNames[date.getDay()]
+    
+    console.log('🔍 CMS: Looking for day:', dayName, 'in schedule')
+    
+    const dayData = currentWeek.days[dayName]
+    if (!dayData) {
+      console.log('❌ CMS: No meals scheduled for', dayName)
+      return []
+    }
+
+    // Convert to array format
+    const meals = []
+    Object.keys(dayData).forEach(mealType => {
+      const meal = dayData[mealType]
+      if (meal && meal.name) {
+        meals.push({
+          ...meal,
+          meal_type: mealType,
+          delivery_date: targetDate,
+          status: 'pending' // Default status
+        })
+        console.log(`✅ CMS: Added meal: ${meal.name} (${mealType})`)
+      }
+    })
+
+    return meals
+  }
+
+  // Overlay delivery status on meal data
+  const overlayDeliveryStatusOnMeals = (scheduleMeals, deliveryMeals) => {
+    return scheduleMeals.map(scheduleMeal => {
+      const deliveryMeal = deliveryMeals.find(deliveryMeal => 
+        deliveryMeal.meal_id === scheduleMeal.id || 
+        deliveryMeal.meal_name === scheduleMeal.name ||
+        deliveryMeal.name === scheduleMeal.name
+      )
+      
+      if (deliveryMeal) {
+        return {
+          ...scheduleMeal,
+          status: deliveryMeal.status || 'pending',
+          status_updated_at: deliveryMeal.status_updated_at,
+          delivered_at: deliveryMeal.delivered_at,
+          delivery_notes: deliveryMeal.delivery_notes || deliveryMeal.notes
+        }
+      } else {
+        return {
+          ...scheduleMeal,
+          status: 'pending'
+        }
+      }
+    })
   }
 
   const statusOptions = [
@@ -97,42 +199,48 @@ const UpdateDeliveryStatus = () => {
     }
   }
 
-  // Filter deliveries (already filtered by userId in API call)
-  const filteredDeliveries = deliveries.filter(delivery => {
-    const matchesStatus = statusFilter === 'all' || delivery.meals.some(meal => meal.status === statusFilter)
+  // Filter meals (already filtered by userId in API call)
+  const filteredMeals = deliveries.filter(meal => {
+    const matchesStatus = statusFilter === 'all' || meal.status === statusFilter
     return matchesStatus
   })
 
   // Calculate stats from real data
   const stats = [
     {
-      label: 'Total Orders',
-      value: deliveries.reduce((acc, d) => acc + (d.meals?.length || 0), 0),
+      label: 'Total Meals',
+      value: deliveries.length,
       icon: '📦',
       color: 'blue'
     },
     {
       label: 'Pending',
-      value: deliveries.reduce((acc, d) => acc + (d.meals?.filter(m => m.status === 'pending').length || 0), 0),
+      value: deliveries.filter(m => m.status === 'pending').length,
       icon: '⏳',
       color: 'gray'
     },
     {
       label: 'In Progress',
-      value: deliveries.reduce((acc, d) => acc + (d.meals?.filter(m => m.status === 'preparing' || m.status === 'out_for_delivery').length || 0), 0),
+      value: deliveries.filter(m => m.status === 'preparing' || m.status === 'out_for_delivery').length,
       icon: '🚀',
       color: 'orange'
     },
     {
       label: 'Delivered',
-      value: deliveries.reduce((acc, d) => acc + (d.meals?.filter(m => m.status === 'delivered').length || 0), 0),
+      value: deliveries.filter(m => m.status === 'delivered').length,
       icon: '✅',
       color: 'green'
     }
   ]
 
-  const handleStatusUpdate = (delivery, meal, newStatus) => {
-    setSelectedMeal({ ...meal, delivery, newStatus })
+  const handleStatusUpdate = (meal, newStatus) => {
+    setSelectedMeal({ 
+      ...meal, 
+      userId: searchQuery || meal.userId, 
+      newStatus,
+      mealId: meal.id,
+      mealType: meal.meal_type || meal.category || 'meal'
+    })
     setShowModal(true)
   }
 
@@ -142,17 +250,44 @@ const UpdateDeliveryStatus = () => {
     try {
       setUpdating(true)
       
+      console.log('🔍 Updating meal status:', {
+        userId: selectedMeal.userId,
+        mealId: selectedMeal.id,
+        newStatus: selectedMeal.newStatus,
+        date: selectedDate,
+        mealType: selectedMeal.mealType,
+        todayDate: new Date().toISOString().split('T')[0]
+      })
+      
+      // Use Pakistan timezone for date calculation
+      const pakistanDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' })
+      const actualDate = selectedDate || pakistanDate
+      console.log('🔍 Using date for update:', actualDate)
+      console.log('🔍 Pakistan date:', pakistanDate)
+      console.log('🔍 UTC date:', new Date().toISOString().split('T')[0])
+      
+      // Validate required fields
+      if (!selectedMeal.userId) {
+        throw new Error('User ID is required')
+      }
+      if (!selectedMeal.id) {
+        throw new Error('Meal ID is required')
+      }
+      if (!selectedMeal.newStatus) {
+        throw new Error('New status is required')
+      }
+      
       // Call the API to update the status
       await updateMealStatus(
-        selectedMeal.delivery.userId,
+        selectedMeal.userId,
         selectedMeal.id,
         selectedMeal.newStatus,
-        selectedDate,
-        selectedMeal.type,
-        '', // notes
-        selectedMeal.mealKey, // e.g., "lunch_1"
-        selectedMeal.weekIndex,
-        selectedMeal.dayKey
+        actualDate,
+        selectedMeal.mealType || selectedMeal.type || '',
+        selectedMeal.delivery_notes || '', // notes
+        selectedMeal.mealKey || '', // e.g., "lunch_1"
+        selectedMeal.weekIndex || 0,
+        selectedMeal.dayKey || ''
       )
 
       // Show success message
@@ -160,7 +295,18 @@ const UpdateDeliveryStatus = () => {
       setSuccessMessage(`Successfully updated ${selectedMeal.name} to ${getStatusLabel(selectedMeal.newStatus)}`)
       setTimeout(() => setSuccessMessage(''), 5000) // Clear after 5 seconds
       
-      // Refresh the deliveries
+      // Test delivery status API immediately after update
+      console.log('🧪 Testing delivery status after update...')
+      try {
+        const testResponse = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${selectedMeal.userId}?date=${actualDate}`);
+        const testData = await testResponse.json();
+        console.log('🧪 Delivery status after update:', testData);
+      } catch (error) {
+        console.error('🧪 Error testing delivery status:', error);
+      }
+      
+      // Refresh the deliveries list to show updated status
+      console.log('🔄 Refreshing deliveries list...')
       await fetchDeliveries()
       
       // Close modal
@@ -272,16 +418,64 @@ const UpdateDeliveryStatus = () => {
             }`}>
               Delivery Date
             </label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                theme === 'dark'
-                  ? 'bg-gray-800 border-gray-700 text-white'
-                  : 'bg-gray-50 border-gray-300 text-gray-900'
-              }`}
-            />
+            <div className="flex gap-2">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className={`flex-1 px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                  theme === 'dark'
+                    ? 'bg-gray-800 border-gray-700 text-white'
+                    : 'bg-gray-50 border-gray-300 text-gray-900'
+                }`}
+              />
+              <button
+                onClick={() => setSelectedDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' }))}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+              >
+                Today
+              </button>
+              <button
+                onClick={async () => {
+                  console.log('🧪 Testing delivery status API...');
+                  try {
+                    const response = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${searchQuery}?date=${selectedDate}`);
+                    const data = await response.json();
+                    console.log('🧪 Delivery status test result:', data);
+                  } catch (error) {
+                    console.error('🧪 Delivery status test error:', error);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                disabled={!searchQuery}
+              >
+                Test API
+              </button>
+              <button
+                onClick={async () => {
+                  console.log('🧪 Testing delivery status API with different date formats...');
+                  const dates = [
+                    selectedDate,
+                    new Date().toISOString().split('T')[0],
+                    new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' })
+                  ];
+                  
+                  for (const date of dates) {
+                    try {
+                      const response = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${searchQuery}?date=${date}`);
+                      const data = await response.json();
+                      console.log(`🧪 Date ${date}:`, data);
+                    } catch (error) {
+                      console.error(`🧪 Error with date ${date}:`, error);
+                    }
+                  }
+                }}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                disabled={!searchQuery}
+              >
+                Test Dates
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -375,7 +569,7 @@ const UpdateDeliveryStatus = () => {
         )}
 
         {/* Empty State */}
-        {!loading && !error && filteredDeliveries.length === 0 && !searchQuery && (
+        {!loading && !error && filteredMeals.length === 0 && !searchQuery && (
           <div className={`rounded-xl p-12 border text-center ${
             theme === 'dark'
               ? 'bg-gray-900 border-gray-800'
@@ -398,7 +592,7 @@ const UpdateDeliveryStatus = () => {
         )}
 
         {/* No Results State */}
-        {!loading && !error && filteredDeliveries.length === 0 && searchQuery && deliveries.length === 0 && (
+        {!loading && !error && filteredMeals.length === 0 && searchQuery && deliveries.length === 0 && (
           <div className={`rounded-xl p-12 border text-center ${
             theme === 'dark'
               ? 'bg-gray-900 border-gray-800'
@@ -420,50 +614,43 @@ const UpdateDeliveryStatus = () => {
           </div>
         )}
 
-        {/* Deliveries */}
-        {!loading && !error && filteredDeliveries.length > 0 && (
-          filteredDeliveries.map((delivery) => (
-            <div
-              key={delivery.id}
-              className={`rounded-xl p-6 border ${
-                theme === 'dark'
-                  ? 'bg-gray-900 border-gray-800'
-                  : 'bg-white border-gray-200'
-              }`}
-            >
-              {/* User Info Header */}
-              <div className="flex items-start justify-between mb-4 pb-4 border-b ${
-                theme === 'dark' ? 'border-gray-800' : 'border-gray-200'
-              }">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                    {delivery.userName.charAt(0)}
-                  </div>
-                  <div>
-                    <h3 className={`text-lg font-bold ${
-                      theme === 'dark' ? 'text-white' : 'text-gray-900'
-                    }`}>{delivery.userName}</h3>
-                    <p className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>User ID: {delivery.userId}</p>
-                    <p className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>📞 {delivery.phone}</p>
-                    <p className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>📍 {delivery.address}</p>
-                  </div>
+        {/* Meals */}
+        {!loading && !error && filteredMeals.length > 0 && (
+          <div className={`rounded-xl p-6 border ${
+            theme === 'dark'
+              ? 'bg-gray-900 border-gray-800'
+              : 'bg-white border-gray-200'
+          }`}>
+            {/* User Info Header */}
+            <div className="flex items-start justify-between mb-4 pb-4 border-b ${
+              theme === 'dark' ? 'border-gray-800' : 'border-gray-200'
+            }">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                  {searchQuery.charAt(0)}
                 </div>
-                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                  {delivery.meals.length} meals
-                </span>
+                <div>
+                  <h3 className={`text-lg font-bold ${
+                    theme === 'dark' ? 'text-white' : 'text-gray-900'
+                  }`}>User {searchQuery}</h3>
+                  <p className={`text-sm ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  }`}>User ID: {searchQuery}</p>
+                  <p className={`text-sm ${
+                    theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+                  }`}>📅 {selectedDate}</p>
+                </div>
               </div>
+              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+                {filteredMeals.length} meals
+              </span>
+            </div>
 
-              {/* Meals List */}
-              <div className="space-y-3">
-                {delivery.meals && delivery.meals.length > 0 ? delivery.meals.map((meal, mealIndex) => (
+            {/* Meals List */}
+            <div className="space-y-3">
+              {filteredMeals && filteredMeals.length > 0 ? filteredMeals.map((meal, mealIndex) => (
                   <div
-                    key={`${meal.id}-${meal.mealKey || mealIndex}`}
+                    key={`${meal.id}-${mealIndex}`}
                     className={`p-4 rounded-lg border ${
                       theme === 'dark'
                         ? 'bg-gray-800/50 border-gray-700'
@@ -472,7 +659,7 @@ const UpdateDeliveryStatus = () => {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-4 flex-1">
-                        <span className="text-3xl">{getMealTypeIcon(meal.type)}</span>
+                        <span className="text-3xl">{getMealTypeIcon(meal.meal_type || meal.category)}</span>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <h4 className={`font-bold ${
@@ -481,21 +668,23 @@ const UpdateDeliveryStatus = () => {
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                               theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
                             }`}>
-                              {meal.type.toUpperCase()}
+                              {(meal.meal_type || meal.category || 'meal').toUpperCase()}
                             </span>
                           </div>
                           <div className={`text-sm mt-1 ${
                             theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
                           }`}>
-                            {meal.estimatedDelivery && `📦 ${meal.estimatedDelivery} • `}
-                            🔥 {meal.calories || 0} cal
-                            {meal.statusUpdatedAt && ` • Updated: ${new Date(meal.statusUpdatedAt).toLocaleTimeString()}`}
+                            🔥 {meal.calories || 0} cal • 
+                            🥩 {meal.protein || 0}g protein • 
+                            🍞 {meal.carbs || 0}g carbs • 
+                            🧈 {meal.fat || 0}g fat
+                            {meal.status_updated_at && ` • Updated: ${new Date(meal.status_updated_at).toLocaleTimeString()}`}
                           </div>
-                          {meal.notes && (
+                          {meal.delivery_notes && (
                             <div className={`text-sm mt-1 ${
                               theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
                             }`}>
-                              📝 Note: {meal.notes}
+                              📝 Note: {meal.delivery_notes}
                             </div>
                           )}
                         </div>
@@ -508,7 +697,7 @@ const UpdateDeliveryStatus = () => {
                         </span>
                         <select
                           value={meal.status}
-                          onChange={(e) => handleStatusUpdate(delivery, meal, e.target.value)}
+                          onChange={(e) => handleStatusUpdate(meal, e.target.value)}
                           className={`px-3 py-2 border rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-500 ${
                             theme === 'dark'
                               ? 'bg-gray-700 border-gray-600 text-white'
@@ -525,17 +714,16 @@ const UpdateDeliveryStatus = () => {
                     </div>
                   </div>
                 )) : (
-                  <div className={`p-4 rounded-lg border text-center ${
-                    theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
-                  }`}>
-                    <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                      No meals scheduled for this user
-                    </p>
-                  </div>
-                )}
-              </div>
+                <div className={`p-4 rounded-lg border text-center ${
+                  theme === 'dark' ? 'bg-gray-800/50 border-gray-700' : 'bg-gray-50 border-gray-200'
+                }`}>
+                  <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                    No meals scheduled for this user
+                  </p>
+                </div>
+              )}
             </div>
-          ))
+          </div>
         )}
       </div>
 
@@ -555,12 +743,17 @@ const UpdateDeliveryStatus = () => {
               <p className={`text-sm mb-2 ${
                 theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
               }`}>
-                <strong>User:</strong> {selectedMeal.delivery.userName}
+                <strong>User ID:</strong> {selectedMeal.userId}
               </p>
               <p className={`text-sm mb-2 ${
                 theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
               }`}>
                 <strong>Meal:</strong> {selectedMeal.name}
+              </p>
+              <p className={`text-sm mb-2 ${
+                theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
+              }`}>
+                <strong>Meal Type:</strong> {(selectedMeal.meal_type || selectedMeal.category || 'meal').toUpperCase()}
               </p>
               <p className={`text-sm mb-2 ${
                 theme === 'dark' ? 'text-gray-400' : 'text-gray-600'

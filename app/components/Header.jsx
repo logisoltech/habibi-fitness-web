@@ -13,6 +13,7 @@ const MAIN = "#18BD0F"; // main color
 export default function Header() {
   const [showBanner, setShowBanner] = useState(true);
   const [open, setOpen] = useState(false);
+  const [isGuestMode, setIsGuestMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   // const { user, isAuthenticated, logout } = useAuth(); // Previous Supabase auth
@@ -26,18 +27,27 @@ export default function Header() {
     const checkAuth = () => {
       try {
         const userData = localStorage.getItem("user_data");
+        const guestMode = localStorage.getItem("guest_mode");
+        
         if (userData) {
           const parsedUser = JSON.parse(userData);
           setUser(parsedUser);
           setIsAuth(true);
+          setIsGuestMode(false);
+        } else if (guestMode === 'true') {
+          setUser({ id: 'guest', name: 'Guest User', isGuest: true });
+          setIsAuth(false);
+          setIsGuestMode(true);
         } else {
           setUser(null);
           setIsAuth(false);
+          setIsGuestMode(false);
         }
       } catch (error) {
         console.error("Error checking auth:", error);
         setUser(null);
         setIsAuth(false);
+        setIsGuestMode(false);
       }
     };
 
@@ -45,7 +55,7 @@ export default function Header() {
 
     // Listen for storage changes (e.g., when user logs in/out in another tab)
     const handleStorageChange = (e) => {
-      if (e.key === "user_data") {
+      if (e.key === "user_data" || e.key === "guest_mode") {
         checkAuth();
       }
     };
@@ -65,9 +75,17 @@ export default function Header() {
 
   const logout = () => {
     localStorage.removeItem("user_data");
+    localStorage.removeItem("guest_mode");
     setUser(null);
     setIsAuth(false);
+    setIsGuestMode(false);
     window.location.href = "/";
+  };
+
+  const handleGuestAccess = () => {
+    localStorage.setItem("guest_mode", "true");
+    setIsGuestMode(true);
+    window.location.href = "/dashboard";
   };
 
   const nav = [
@@ -81,6 +99,13 @@ export default function Header() {
     href === "/" ? pathname === "/" : pathname?.startsWith(href);
 
   const handleHomeClick = (e) => {
+    // If in guest mode, allow access to dashboard
+    if (isGuestMode) {
+      // Let the normal link behavior proceed to /dashboard
+      return;
+    }
+    
+    // If not authenticated and not in guest mode, redirect to login
     if (!isAuthenticated()) {
       e.preventDefault();
       window.location.href = "/auth/login";
@@ -185,23 +210,81 @@ export default function Header() {
                    </svg>
                  </button>
               </div>
+            ) : isGuestMode ? (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('guest_mode');
+                    setIsGuestMode(false);
+                    window.location.href = '/';
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition"
+                >
+                  Logout
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('guest_mode');
+                    window.location.href = '/auth/login';
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-white shadow-sm transition"
+                  style={{ backgroundColor: MAIN }}
+                >
+                  Login for Full Access
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
             ) : (
-              <Link
-                href="/auth/login"
-                className="inline-flex items-center gap-2 rounded-full px-5 py-2 font-medium text-white shadow-sm transition"
-                style={{ backgroundColor: MAIN }}
-              >
-                Login/Signup
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M5 12h14M13 5l7 7-7 7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </Link>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleGuestAccess}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50 transition"
+                >
+                  Access As Guest
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+                <Link
+                  href="/auth/login"
+                  className="inline-flex items-center gap-2 rounded-full px-5 py-2 font-medium text-white shadow-sm transition"
+                  style={{ backgroundColor: MAIN }}
+                >
+                  Login/Signup
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M5 12h14M13 5l7 7-7 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </Link>
+              </div>
             )}
           </div>
 
@@ -310,15 +393,51 @@ export default function Header() {
                     Logout
                   </button>
                 </div>
+              ) : isGuestMode ? (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('guest_mode');
+                      setIsGuestMode(false);
+                      setOpen(false);
+                      window.location.href = '/';
+                    }}
+                    className="block w-full text-center rounded-lg px-4 py-3 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  >
+                    Logout
+                  </button>
+                  <button
+                    onClick={() => {
+                      localStorage.removeItem('guest_mode');
+                      setOpen(false);
+                      window.location.href = '/auth/login';
+                    }}
+                    className="block w-full text-center rounded-lg px-4 py-3 font-medium text-white"
+                    style={{ backgroundColor: MAIN }}
+                  >
+                    Login for Full Access
+                  </button>
+                </div>
               ) : (
-                <Link
-                  href="/auth/login"
-                  onClick={() => setOpen(false)}
-                  className="block text-center rounded-lg px-4 py-3 font-medium text-white"
-                  style={{ backgroundColor: MAIN }}
-                >
-                  Login/Signup
-                </Link>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => {
+                      handleGuestAccess();
+                      setOpen(false);
+                    }}
+                    className="block w-full text-center rounded-lg px-4 py-3 font-medium text-gray-700 border border-gray-300 hover:bg-gray-50"
+                  >
+                    Access As Guest
+                  </button>
+                  <Link
+                    href="/auth/login"
+                    onClick={() => setOpen(false)}
+                    className="block text-center rounded-lg px-4 py-3 font-medium text-white"
+                    style={{ backgroundColor: MAIN }}
+                  >
+                    Login/Signup
+                  </Link>
+                </div>
               )}
             </li>
           </ul>

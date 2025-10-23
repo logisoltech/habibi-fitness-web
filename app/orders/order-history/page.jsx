@@ -1,70 +1,378 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { font } from "../../components/font/font";
 import Header from "../../components/Header";
+import ApiService from "../../services/api";
 
 export default function OrderHistory() {
   const router = useRouter();
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [user, setUser] = useState(null);
+  const [isAuth, setIsAuth] = useState(false);
 
-  // Static order data
-  const orders = [
-    {
-      id: 1,
-      orderNumber: "ORD-2024-001",
-      date: "Oct 5, 2024",
-      meals: [
-        { name: "Grilled Chicken Caesar Salad", quantity: 2 },
-        { name: "Protein Smoothie Bowl", quantity: 1 },
-      ],
-      totalPrice: 45.99,
-      status: "delivered",
-      tracking: {
-        leftKitchen: { time: "11:45 AM", date: "Oct 5, 2024", completed: true },
-        outForDelivery: {
-          time: "12:15 PM",
-          date: "Oct 5, 2024",
-          completed: true,
-        },
-        delivered: { time: "12:45 PM", date: "Oct 5, 2024", completed: true },
-      },
-    },
-    {
-      id: 2,
-      orderNumber: "ORD-2024-002",
-      date: "Oct 6, 2024",
-      meals: [
-        { name: "Keto Salmon with Vegetables", quantity: 1 },
-        { name: "Greek Yogurt Parfait", quantity: 2 },
-      ],
-      totalPrice: 38.5,
-      status: "in_process",
-      tracking: {
-        leftKitchen: { time: "10:30 AM", date: "Oct 6, 2024", completed: true },
-        outForDelivery: { time: "Pending", date: "", completed: false },
-        delivered: { time: "Pending", date: "", completed: false },
-      },
-    },
-    {
-      id: 3,
-      orderNumber: "ORD-2024-003",
-      date: "Oct 6, 2024",
-      meals: [
-        { name: "Quinoa Buddha Bowl", quantity: 3 },
-        { name: "Green Detox Juice", quantity: 1 },
-      ],
-      totalPrice: 52.75,
-      status: "pending",
-      tracking: {
-        leftKitchen: { time: "Pending", date: "", completed: false },
-        outForDelivery: { time: "Pending", date: "", completed: false },
-        delivered: { time: "Pending", date: "", completed: false },
-      },
-    },
-  ];
+  // Check authentication status on component mount
+  useEffect(() => {
+    const checkAuth = () => {
+      try {
+        const userData = localStorage.getItem("user_data");
+        if (userData) {
+          const parsedUser = JSON.parse(userData);
+          setUser(parsedUser);
+          setIsAuth(true);
+          fetchUserOrders(parsedUser);
+        } else {
+          setUser(null);
+          setIsAuth(false);
+          router.push('/auth/login');
+        }
+      } catch (error) {
+        console.error("Error checking auth:", error);
+        setUser(null);
+        setIsAuth(false);
+        router.push('/auth/login');
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  // Fetch user orders
+  const fetchUserOrders = async (userData = null) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Use provided userData or get from state
+      const currentUser = userData || user;
+      if (!currentUser) {
+        throw new Error("User not found. Please login again.");
+      }
+
+      // Debug: Log the user data structure
+      console.log("Current user data:", currentUser);
+      console.log("Available keys:", Object.keys(currentUser));
+
+      // Try different possible user ID fields
+      let userId = currentUser?.id || 
+                   currentUser?.userId || 
+                   currentUser?.user_id ||
+                   currentUser?.userID ||
+                   currentUser?.ID;
+
+      console.log("Extracted userId:", userId);
+
+      // If no direct user ID found, try to get user by phone number
+      if (!userId && currentUser?.phone) {
+        try {
+          console.log("No direct user ID found, trying to get user by phone:", currentUser.phone);
+          const userResponse = await ApiService.getUserByPhone(currentUser.phone);
+          if (userResponse.success && userResponse.data) {
+            userId = userResponse.data.id || userResponse.data.userId;
+            console.log("Got user ID from phone lookup:", userId);
+          }
+        } catch (phoneError) {
+          console.error("Error getting user by phone:", phoneError);
+        }
+      }
+
+      if (!userId) {
+        console.error("No user ID found in user data:", currentUser);
+        throw new Error("User ID not found. Please login again.");
+      }
+
+      // First try to get delivery status, if no meals found, get meal schedule
+      console.log("Fetching delivery status for userId:", userId);
+      let response = await ApiService.getUserDeliveryStatus(userId);
+      console.log("Delivery status response:", response);
+      
+      let orders = [];
+      
+      if (response.success && response.data && response.data.meals && response.data.meals.length > 0) {
+        console.log("Delivery data received:", response.data);
+        // Transform the delivery status data into order format
+        orders = transformDeliveryDataToOrders(response.data.meals);
+        console.log("Transformed orders from delivery data:", orders);
+      } else {
+        console.log("No delivery data found, trying meal schedule...");
+        // If no delivery data, get meal schedule and create orders from it
+        try {
+          const scheduleResponse = await ApiService.getMealSchedule(userId);
+          console.log("Meal schedule response:", scheduleResponse);
+          
+          if (scheduleResponse.success && scheduleResponse.data) {
+            orders = transformMealScheduleToOrders(scheduleResponse.data, userId);
+            console.log("Transformed orders from meal schedule:", orders);
+          } else {
+            // If no schedule exists, try to generate one
+            console.log("No meal schedule found, generating one...");
+            const generateResponse = await ApiService.generateMealSchedule(userId, 4);
+            if (generateResponse.success && generateResponse.data) {
+              orders = transformMealScheduleToOrders(generateResponse.data, userId);
+              console.log("Transformed orders from generated schedule:", orders);
+            }
+          }
+        } catch (scheduleError) {
+          console.error("Error fetching meal schedule:", scheduleError);
+        }
+      }
+      
+      setOrders(orders);
+    } catch (error) {
+      console.error('Error fetching user orders:', error);
+      setError(error.message);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+  // Transform meal schedule data to order history format
+  const transformMealScheduleToOrders = (scheduleData, userId) => {
+    console.log("Transforming meal schedule data:", scheduleData);
+    
+    if (!scheduleData || !scheduleData.weeks || scheduleData.weeks.length === 0) {
+      console.log("No weeks data found");
+      return [];
+    }
+
+    const ordersByDate = {};
+    const currentDate = new Date();
+    
+    // Process the first week (current week)
+    const currentWeek = scheduleData.weeks[0];
+    console.log("Current week data:", currentWeek);
+    
+    if (!currentWeek || !currentWeek.days) {
+      console.log("No days data found in current week");
+      return [];
+    }
+
+    // Get user's selected days
+    const userData = JSON.parse(localStorage.getItem("user_data") || "{}");
+    const userSelectedDays = userData.selecteddays || ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+    console.log("User selected days:", userSelectedDays);
+    
+    const dayMapping = {
+      "MON": "monday",
+      "TUE": "tuesday", 
+      "WED": "wednesday",
+      "THU": "thursday",
+      "FRI": "friday",
+      "SAT": "saturday",
+      "SUN": "sunday"
+    };
+
+    // Process each day in the current week
+    Object.keys(currentWeek.days).forEach(dayKey => {
+      console.log(`Processing day: ${dayKey}`);
+      const dayData = currentWeek.days[dayKey];
+      if (!dayData) {
+        console.log(`No data for day: ${dayKey}`);
+        return;
+      }
+
+      // Check if this day is in user's selected days
+      const dayKeyUpper = dayKey.toUpperCase();
+      console.log(`Checking if ${dayKeyUpper} is in selected days:`, userSelectedDays.includes(dayKeyUpper));
+      
+      if (!userSelectedDays.includes(dayKeyUpper)) {
+        console.log(`Day ${dayKeyUpper} not in user's selected days`);
+        return;
+      }
+
+      // Calculate the date for this day (simplified - just use current date for now)
+      const dayDate = new Date(currentDate);
+      
+      const dateKey = dayDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+
+      console.log(`Creating order for ${dayKey} on ${dateKey}`);
+
+      if (!ordersByDate[dateKey]) {
+        ordersByDate[dateKey] = {
+          id: `order-${dayDate.toISOString().split('T')[0]}`,
+          orderNumber: `ORD-${dayDate.toISOString().split('T')[0].replace(/-/g, '')}`,
+          date: dateKey,
+          meals: [],
+          totalPrice: 0,
+          status: 'pending', // Default status for scheduled meals
+          tracking: {
+            leftKitchen: { time: "Pending", date: "", completed: false },
+            outForDelivery: { time: "Pending", date: "", completed: false },
+            delivered: { time: "Pending", date: "", completed: false },
+          }
+        };
+      }
+
+      // Add meals for this day
+      Object.keys(dayData).forEach(mealType => {
+        const meal = dayData[mealType];
+        console.log(`Processing ${mealType} meal:`, meal);
+        
+        if (meal && meal.name) {
+          ordersByDate[dateKey].meals.push({
+            name: meal.meal_name || meal.name,
+            quantity: 1
+          });
+          
+          // Add estimated price
+          ordersByDate[dateKey].totalPrice += meal.price || 15.99;
+          console.log(`Added meal: ${meal.name}, price: ${meal.price || 15.99}`);
+        }
+      });
+    });
+
+    console.log("Final orders by date:", ordersByDate);
+
+    // Convert to array and sort by date (newest first)
+    const result = Object.values(ordersByDate).sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB - dateA;
+    });
+    
+    console.log("Final transformed orders:", result);
+    return result;
+  };
+
+  // Transform delivery status data to order history format
+  const transformDeliveryDataToOrders = (deliveryData) => {
+    if (!Array.isArray(deliveryData) || deliveryData.length === 0) {
+      return [];
+    }
+
+    // Group meals by date to create orders
+    const ordersByDate = {};
+    
+    deliveryData.forEach(meal => {
+      // Handle different date formats
+      let deliveryDate;
+      if (meal.delivery_date) {
+        deliveryDate = meal.delivery_date;
+      } else if (meal.date) {
+        deliveryDate = meal.date;
+      } else if (meal.created_at) {
+        deliveryDate = meal.created_at.split('T')[0];
+      } else {
+        deliveryDate = new Date().toISOString().split('T')[0];
+      }
+
+      const dateKey = new Date(deliveryDate).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+      
+      if (!ordersByDate[dateKey]) {
+        ordersByDate[dateKey] = {
+          id: `order-${deliveryDate}`,
+          orderNumber: `ORD-${deliveryDate.replace(/-/g, '')}`,
+          date: dateKey,
+          meals: [],
+          totalPrice: 0,
+          status: 'pending',
+          tracking: {
+            leftKitchen: { time: "Pending", date: "", completed: false },
+            outForDelivery: { time: "Pending", date: "", completed: false },
+            delivered: { time: "Pending", date: "", completed: false },
+          }
+        };
+      }
+      
+      // Add meal to the order
+      ordersByDate[dateKey].meals.push({
+        name: meal.meal_name || meal.name || meal.meal_title || 'Meal',
+        quantity: meal.quantity || 1
+      });
+      
+      // Update order status based on meal status
+      const mealStatus = meal.status || 'pending';
+      if (mealStatus === 'delivered' && ordersByDate[dateKey].status !== 'delivered') {
+        ordersByDate[dateKey].status = 'delivered';
+      } else if (mealStatus === 'out_for_delivery' && ordersByDate[dateKey].status === 'pending') {
+        ordersByDate[dateKey].status = 'in_process';
+      } else if (mealStatus === 'preparing' && ordersByDate[dateKey].status === 'pending') {
+        ordersByDate[dateKey].status = 'in_process';
+      }
+      
+      // Update tracking information
+      if (mealStatus === 'delivered') {
+        const deliveredTime = meal.delivered_at || meal.status_updated_at;
+        if (deliveredTime) {
+          ordersByDate[dateKey].tracking.delivered = {
+            time: new Date(deliveredTime).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            date: dateKey,
+            completed: true
+          };
+        }
+        ordersByDate[dateKey].tracking.outForDelivery = {
+          time: "Completed",
+          date: dateKey,
+          completed: true
+        };
+        ordersByDate[dateKey].tracking.leftKitchen = {
+          time: "Completed",
+          date: dateKey,
+          completed: true
+        };
+      } else if (mealStatus === 'out_for_delivery') {
+        const outForDeliveryTime = meal.status_updated_at;
+        if (outForDeliveryTime) {
+          ordersByDate[dateKey].tracking.outForDelivery = {
+            time: new Date(outForDeliveryTime).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            date: dateKey,
+            completed: true
+          };
+        }
+        ordersByDate[dateKey].tracking.leftKitchen = {
+          time: "Completed",
+          date: dateKey,
+          completed: true
+        };
+      } else if (mealStatus === 'preparing') {
+        const preparingTime = meal.status_updated_at;
+        if (preparingTime) {
+          ordersByDate[dateKey].tracking.leftKitchen = {
+            time: new Date(preparingTime).toLocaleTimeString('en-US', { 
+              hour: 'numeric', 
+              minute: '2-digit',
+              hour12: true 
+            }),
+            date: dateKey,
+            completed: true
+          };
+        }
+      }
+      
+      // Add estimated price (you might want to get this from meal data)
+      ordersByDate[dateKey].totalPrice += (meal.price || 15.99) * (meal.quantity || 1);
+    });
+    
+    // Convert to array and sort by date (newest first)
+    return Object.values(ordersByDate).sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB - dateA;
+    });
+  };
 
   const getStatusStyle = (status) => {
     switch (status) {
@@ -166,13 +474,63 @@ export default function OrderHistory() {
               </svg>
             </button>
             <h1 className="text-lg font-bold text-gray-900">Order History</h1>
-            <div className="w-10" /> {/* Placeholder for centering */}
+            <button
+              onClick={fetchUserOrders}
+              disabled={loading}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <svg
+                className={`w-5 h-5 text-gray-700 ${loading ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </button>
           </div>
 
           {/* Orders List */}
           <div className="px-4 py-4">
-            <div className="space-y-4">
-              {orders.map((order) => {
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mb-4"></div>
+                <p className="text-gray-600">Loading your orders...</p>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <p className="text-red-600 font-medium mb-2">Error loading orders</p>
+                <p className="text-gray-600 text-sm text-center mb-4">{error}</p>
+                <button
+                  onClick={fetchUserOrders}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                </div>
+                <p className="text-gray-600 font-medium mb-2">No orders found</p>
+                <p className="text-gray-500 text-sm text-center">You haven't placed any orders yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((order) => {
                 const statusStyle = getStatusStyle(order.status);
 
                 return (
@@ -248,9 +606,10 @@ export default function OrderHistory() {
                 );
               })}
 
-              {/* Empty space at bottom */}
-              <div className="h-5" />
-            </div>
+                {/* Empty space at bottom */}
+                <div className="h-5" />
+              </div>
+            )}
           </div>
 
           {/* Order Details Modal */}

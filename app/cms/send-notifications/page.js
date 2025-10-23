@@ -34,7 +34,7 @@ const SendNotifications = () => {
     setResult(null)
 
     try {
-      const response = await fetch('http://localhost:5000/api/notifications/send', {
+      const response = await fetch('https://habibi-fitness-server.onrender.com/api/notifications/send', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

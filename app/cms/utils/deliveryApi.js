@@ -2,7 +2,7 @@
 // These functions interact with the server.js endpoints
 
 // Base API URL - update this for production
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com/api'
 
 /**
  * Update the status of a specific meal for a user
@@ -19,26 +19,36 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'
  */
 export const updateMealStatus = async (userId, mealId, status, date, mealType = '', notes = '', mealKey = '', weekIndex = null, dayKey = '') => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/delivery-status/update`, {
+    const payload = {
+      userId,
+      mealId,
+      status,
+      date,
+      mealType,
+      notes,
+      mealKey,
+      weekIndex,
+      dayKey,
+      timestamp: new Date().toISOString()
+    }
+    
+    console.log('🔍 Sending status update payload:', payload)
+    
+    const response = await fetch(`${API_BASE_URL}/delivery-status/update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        userId,
-        mealId,
-        status,
-        date,
-        mealType,
-        notes,
-        mealKey,
-        weekIndex,
-        dayKey,
-        timestamp: new Date().toISOString()
-      }),
+      body: JSON.stringify(payload),
     })
 
     const data = await response.json()
+    
+    console.log('🔍 Status update response:', {
+      status: response.status,
+      ok: response.ok,
+      data: data
+    })
 
     if (!response.ok) {
       throw new Error(data.message || data.error || 'Failed to update meal status')
@@ -67,7 +77,7 @@ export const fetchDeliveryStatuses = async (filters = {}) => {
     if (filters.status) params.append('status', filters.status)
     if (filters.search) params.append('search', filters.search)
 
-    const url = `${API_BASE_URL}/api/delivery-status${params.toString() ? `?${params.toString()}` : ''}`
+    const url = `${API_BASE_URL}/delivery-status${params.toString() ? `?${params.toString()}` : ''}`
     const response = await fetch(url)
     
     const data = await response.json()
@@ -97,7 +107,7 @@ export const fetchDeliveriesByDate = async (date, filters = {}) => {
     if (filters.status) params.append('status', filters.status)
     if (filters.userId) params.append('userId', filters.userId)
 
-    const url = `${API_BASE_URL}/api/delivery-status/date/${date}${params.toString() ? `?${params.toString()}` : ''}`
+    const url = `${API_BASE_URL}/delivery-status/date/${date}${params.toString() ? `?${params.toString()}` : ''}`
     console.log('🔍 Fetching from:', url)
     
     const response = await fetch(url)
@@ -133,7 +143,7 @@ export const fetchUserDeliveryStatus = async (userId, filters = {}) => {
     if (filters.date) params.append('date', filters.date)
     if (filters.status) params.append('status', filters.status)
 
-    const url = `${API_BASE_URL}/api/delivery-status/user/${userId}${params.toString() ? `?${params.toString()}` : ''}`
+    const url = `${API_BASE_URL}/delivery-status/user/${userId}${params.toString() ? `?${params.toString()}` : ''}`
     const response = await fetch(url)
     
     const data = await response.json()
@@ -157,7 +167,7 @@ export const fetchUserDeliveryStatus = async (userId, filters = {}) => {
  */
 export const batchUpdateMealStatuses = async (updates) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/delivery-status/batch-update`, {
+    const response = await fetch(`${API_BASE_URL}/delivery-status/batch-update`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -191,7 +201,7 @@ export const fetchDeliveryStatistics = async (filters = {}) => {
     if (filters.startDate) params.append('startDate', filters.startDate)
     if (filters.endDate) params.append('endDate', filters.endDate)
 
-    const url = `${API_BASE_URL}/api/delivery-status/stats${params.toString() ? `?${params.toString()}` : ''}`
+    const url = `${API_BASE_URL}/delivery-status/stats${params.toString() ? `?${params.toString()}` : ''}`
     const response = await fetch(url)
     
     const data = await response.json()

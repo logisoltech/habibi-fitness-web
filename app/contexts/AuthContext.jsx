@@ -26,10 +26,15 @@ export const AuthProvider = ({ children }) => {
       try {
         const storedUser = localStorage.getItem('habibi_user');
         const storedSession = localStorage.getItem('habibi_session');
+        const guestMode = localStorage.getItem('guest_mode');
         
         if (storedUser && storedSession) {
           setUser(JSON.parse(storedUser));
           setSession(JSON.parse(storedSession));
+        } else if (guestMode === 'true') {
+          // Set guest user for guest mode
+          setUser({ id: 'guest', name: 'Guest User', isGuest: true });
+          setSession({ access_token: 'guest_token', isGuest: true });
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -49,6 +54,7 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     localStorage.removeItem('habibi_user');
     localStorage.removeItem('habibi_session');
+    localStorage.removeItem('guest_mode');
   };
 
   // Sign up function
@@ -163,6 +169,11 @@ export const AuthProvider = ({ children }) => {
     return !!(user && session);
   };
 
+  // Check if user is in guest mode
+  const isGuestMode = () => {
+    return !!(user?.isGuest && session?.isGuest);
+  };
+
   // Get access token
   const getAccessToken = () => {
     return session?.access_token || null;
@@ -209,6 +220,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isAuthenticated,
+    isGuestMode,
     getAccessToken,
     getRefreshToken,
     apiCall,

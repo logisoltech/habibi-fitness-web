@@ -115,7 +115,7 @@ export default function Login() {
 
       // Use server.js API directly instead of Next.js API
       const response = await fetch(
-        "http://localhost:5000/api/users/phone/" +
+        "https://habibi-fitness-server.onrender.com/api/users/phone/" +
         encodeURIComponent(phoneNumber),
         {
           method: "GET",

@@ -115,12 +115,12 @@ export default function Dashboard() {
   });
 
   // Meal planning state
-  const [selectedMealCategory, setSelectedMealCategory] = useState('breakfast');
+  const [selectedMealCategory, setSelectedMealCategory] = useState('lunch');
   const [userMealSchedule, setUserMealSchedule] = useState(null);
   const [selectedDayMeals, setSelectedDayMeals] = useState({});
   const [mealPlanLoading, setMealPlanLoading] = useState(true);
 
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isGuestMode, logout } = useAuth();
   const { userData, loadUserData, getBMIInfo, updateWeight } = useUserData();
   const router = useRouter();
 
@@ -150,6 +150,14 @@ export default function Dashboard() {
   const fetchUserMealSchedule = async () => {
     try {
       setMealPlanLoading(true);
+      
+      // Skip meal fetching in guest mode
+      if (isGuestMode()) {
+        console.log('🔍 Guest mode: Skipping meal schedule fetch');
+        setMealPlanLoading(false);
+        return;
+      }
+      
       const userId = userData?.userId || userData?.id;
       
       console.log('🔍 DEBUG: Starting fetchUserMealSchedule');
@@ -282,6 +290,13 @@ export default function Dashboard() {
       try {
         // Check if we're on the client side to avoid hydration issues
         if (typeof window === 'undefined') return;
+        
+        // Skip data loading in guest mode
+        if (isGuestMode()) {
+          console.log('🔍 Guest mode: Skipping user data and macro calculation');
+          setMealsLoading(false);
+          return;
+        }
         
         const storedUserData = localStorage.getItem('user_data');
         if (storedUserData) {
@@ -849,6 +864,7 @@ export default function Dashboard() {
       <main className="bg-white">
         {/* Fixed Section Container */}
         <div ref={containerRef} className="mt-25 h-[300vh] relative">
+          
           {/* <h1 className="text-4xl font-bold text-gray-900 mb-4 px-10">Hello {user?.user_metadata?.full_name || 'User'}!</h1> */}
           <div className="sticky top-0 h-screen flex items-center">
             <div className="min-h-screen overflow-hidden flex justify-center 2xl:justify-between 2xl:w-full mx-auto">
@@ -1171,22 +1187,45 @@ export default function Dashboard() {
                 Plan Your Meals
               </h2>
 
-              {/* Meal Category Tabs */}
-              <div className="flex gap-2 mb-6">
-                {['breakfast', 'lunch', 'dinner', 'snacks'].map((category) => (
+              {isGuestMode() ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <h3 className="text-lg font-semibold text-yellow-800">Guest Mode</h3>
+                  </div>
+                  <p className="text-yellow-700 mb-4">
+                    Meal suggestions are not available in guest mode. Please log in to access personalized meal plans.
+                  </p>
                   <button
-                    key={category}
-                    onClick={() => setSelectedMealCategory(category)}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                      selectedMealCategory === category
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    onClick={() => {
+                      localStorage.removeItem('guest_mode');
+                      window.location.href = '/auth/login';
+                    }}
+                    className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-colors"
                   >
-                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                    Login for Full Access
                   </button>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <>
+                  {/* Meal Category Tabs */}
+                  <div className="flex gap-2 mb-6">
+                    {['breakfast', 'lunch', 'dinner', 'snacks'].map((category) => (
+                      <button
+                        key={category}
+                        onClick={() => setSelectedMealCategory(category)}
+                        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+                          selectedMealCategory === category
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {category.charAt(0).toUpperCase() + category.slice(1)}
+                      </button>
+                    ))}
+                  </div>
 
               {/* Meals Carousel */}
               {mealPlanLoading ? (
@@ -1275,6 +1314,8 @@ export default function Dashboard() {
                   ></div>
                 </div>
               </div>
+                </>
+              )}
             </div>
           </div>
         </div>

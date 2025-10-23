@@ -55,7 +55,7 @@ export default function MealsExample() {
         params.append("offset", filters.offset);
       }
 
-      const url = `/api/meals${
+      const url = `https://habibi-fitness-server.onrender.com/api/meals${
         params.toString() ? `?${params.toString()}` : ""
       }`;
       const response = await fetch(url);
