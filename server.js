@@ -960,9 +960,12 @@ app.post('/api/schedule/generate', async (req, res) => {
     const scheduler = new MealScheduler();
     
     // Generate schedule
-    console.log('Generating schedule for user:');
+    console.log('🔄 Generating schedule for user:', userData.id);
+    console.log('🔄 Available meals count:', meals?.length || 0);
+    console.log('🔄 Weeks to generate:', weeks);
     
     if (!meals || meals.length === 0) {
+      console.error('❌ No meals available in database');
       return res.status(400).json({
         success: false,
         message: 'No meals available in database. Please add some meals first.'
@@ -971,10 +974,22 @@ app.post('/api/schedule/generate', async (req, res) => {
     
     let schedule;
     try {
+      console.log('🔄 Calling meal scheduler...');
       schedule = scheduler.generateMealSchedule(userData, meals, weeks);
+      console.log('✅ Meal schedule generated successfully');
+      console.log('📋 Schedule structure:', {
+        weeks: schedule.weeks?.length || 0,
+        totalMeals: schedule.totalMeals || 0,
+        fiveStarMeals: schedule.fiveStarMeals || 0
+      });
     } catch (schedulerError) {
-      console.error('Meal scheduler error:', schedulerError.message);
-      throw new Error(`Meal scheduler failed: ${schedulerError.message}`);
+      console.error('❌ Meal scheduler error:', schedulerError);
+      console.error('❌ Error stack:', schedulerError.stack);
+      return res.status(500).json({
+        success: false,
+        message: `Meal scheduler failed: ${schedulerError.message}`,
+        error: schedulerError.message
+      });
     }
 
     // Save schedule to database (optional - don't fail if table doesn't exist yet)
