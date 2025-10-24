@@ -59,7 +59,7 @@ export default function ContactPage() {
               </h1>
               <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
                 Have questions about our meal plans? Need help with your order? 
-                We're here to help! Reach out to us and we'll get back to you within 24 hours.
+                We&apos;re here to help! Reach out to us and we&apos;ll get back to you within 24 hours.
               </p>
             </div>
           </div>
@@ -75,7 +75,7 @@ export default function ContactPage() {
                 
                 {submitStatus === 'success' && (
                   <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-                    ✅ Thank you for your message! We'll get back to you within 24 hours.
+                    ✅ Thank you for your message! We&apos;ll get back to you within 24 hours.
                   </div>
                 )}
 
@@ -190,7 +190,7 @@ export default function ContactPage() {
                 <div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-6">Contact Information</h2>
                   <p className="text-gray-600 mb-8">
-                    We're here to help! Choose the most convenient way to reach us.
+                    We&apos;re here to help! Choose the most convenient way to reach us.
                   </p>
                 </div>
 
@@ -252,7 +252,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900 mb-1">Business Hours</h3>
-                      <p className="text-gray-600 mb-2">We're here to help</p>
+                      <p className="text-gray-600 mb-2">We&apos;re here to help</p>
                       <div className="text-gray-700 space-y-1">
                         <p>Monday - Friday: 9:00 AM - 6:00 PM</p>
                         <p>Saturday: 10:00 AM - 4:00 PM</p>
@@ -322,7 +322,7 @@ export default function ContactPage() {
               Still Have Questions?
             </h2>
             <p className="text-xl text-green-100 mb-8">
-              Our support team is here to help you 24/7. Don't hesitate to reach out!
+              Our support team is here to help you 24/7. Don&apos;t hesitate to reach out!
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a

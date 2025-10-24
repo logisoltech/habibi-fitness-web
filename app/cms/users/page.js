@@ -192,7 +192,7 @@ export default function UsersPage() {
                 <option value="Low Carb">Low Carb</option>
                 <option value="Protein Boost">Protein Boost</option>
                 <option value="Vegetarian Kitchen">Vegetarian Kitchen</option>
-                <option value="Chef's Choice">Chef's Choice</option>
+                <option value="Chef's Choice">Chef&apos;s Choice</option>
                 <option value="Keto">Keto</option>
               </select>
             </div>
