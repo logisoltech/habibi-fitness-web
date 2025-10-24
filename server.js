@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
@@ -847,7 +848,7 @@ app.get('/api/schedule/test', async (req, res) => {
     }
     
     // Test meal scheduler
-    const MealScheduler = require('./mealScheduler');
+    const MealScheduler = require('./app/services/mealScheduler');
     const scheduler = new MealScheduler();
     
     const testSchedule = scheduler.generateMealSchedule(users[0], meals, 1);
@@ -956,7 +957,7 @@ app.post('/api/schedule/generate', async (req, res) => {
     }
 
     // Import and use meal scheduler
-    const MealScheduler = require('./mealScheduler');
+    const MealScheduler = require('./app/services/mealScheduler');
     const scheduler = new MealScheduler();
     
     // Generate schedule
@@ -1153,7 +1154,7 @@ app.put('/api/schedule/:userId', async (req, res) => {
     }
 
     // Import and use meal scheduler
-    const MealScheduler = require('./mealScheduler');
+    const MealScheduler = require('./app/services/mealScheduler');
     const scheduler = new MealScheduler();
     
     // Generate new schedule
