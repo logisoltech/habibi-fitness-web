@@ -1,7 +1,7 @@
 # Stripe Environment Variables Setup
 # Add these to your .env.local file:
 
-
+ 
 
 # Instructions:
 # 1. Replace 'your_stripe_secret_key_here' with your actual Stripe secret key
