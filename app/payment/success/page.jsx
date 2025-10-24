@@ -288,7 +288,7 @@ function PaymentSuccessContent() {
               </div>
               <div className="flex items-start gap-3">
                 <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
-                <p className="text-gray-700">Check your dashboard to view your meal schedule and delivery status.</p>
+                <p className="text-gray-700">Log in to your account to view your personalized meal schedule and delivery status.</p>
               </div>
             </div>
           </div>
@@ -296,44 +296,31 @@ function PaymentSuccessContent() {
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-4">
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/auth/login')}
               className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
             >
-              Go to Dashboard
+              Login to Continue
             </button>
             <button
-              onClick={() => router.push('/meal-schedule')}
+              onClick={() => router.push('/menu')}
               className="flex-1 bg-white text-green-600 border border-green-600 px-6 py-3 rounded-lg hover:bg-green-50 font-semibold"
             >
-              View Meal Schedule
+              View Menu
             </button>
           </div>
 
-          {/* Debug Section */}
-          <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug Information</h3>
-            <button
-              onClick={async () => {
-                try {
-                  const response = await fetch('/api/test-user-registration', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                  });
-                  const result = await response.json();
-                  console.log('🧪 Test registration result:', result);
-                  alert(`Test result: ${JSON.stringify(result, null, 2)}`);
-                } catch (error) {
-                  console.error('Test error:', error);
-                  alert(`Test error: ${error.message}`);
-                }
-              }}
-              className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
-            >
-              Test User Registration API
-            </button>
-            <p className="text-sm text-yellow-700 mt-2">
-              Click this button to test if the user registration API is working.
+          {/* Login Section */}
+          <div className="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-lg text-center">
+            <h3 className="text-lg font-semibold text-blue-800 mb-2">Ready to Get Started?</h3>
+            <p className="text-blue-700 mb-4">
+              Your account has been created successfully! Please log in to access your personalized meal plan.
             </p>
+            <button
+              onClick={() => router.push('/auth/login')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Go to Login
+            </button>
           </div>
 
           {/* Support Info */}
