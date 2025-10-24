@@ -1,414 +1,415 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react'
-import { useTheme } from '../contexts/ThemeContext'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-const UsersPage = () => {
-  const { theme } = useTheme()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+export default function UsersPage() {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterPlan, setFilterPlan] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const router = useRouter();
 
-  // Sample user data
-  const [users] = useState([
-    {
-      id: 1,
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      phone: '+1 234 567 8900',
-      status: 'active',
-      role: 'Premium User',
-      joinedDate: '2024-01-15',
-      lastActive: '2 hours ago',
-      avatar: 'JD'
-    },
-    {
-      id: 2,
-      name: 'Jane Smith',
-      email: 'jane.smith@example.com',
-      phone: '+1 234 567 8901',
-      status: 'active',
-      role: 'Free User',
-      joinedDate: '2024-02-20',
-      lastActive: '5 hours ago',
-      avatar: 'JS'
-    },
-    {
-      id: 3,
-      name: 'Mike Johnson',
-      email: 'mike.j@example.com',
-      phone: '+1 234 567 8902',
-      status: 'inactive',
-      role: 'Premium User',
-      joinedDate: '2024-01-10',
-      lastActive: '2 days ago',
-      avatar: 'MJ'
-    },
-    {
-      id: 4,
-      name: 'Sarah Williams',
-      email: 'sarah.w@example.com',
-      phone: '+1 234 567 8903',
-      status: 'active',
-      role: 'Premium User',
-      joinedDate: '2024-03-05',
-      lastActive: '1 hour ago',
-      avatar: 'SW'
-    },
-    {
-      id: 5,
-      name: 'Tom Brown',
-      email: 'tom.brown@example.com',
-      phone: '+1 234 567 8904',
-      status: 'suspended',
-      role: 'Free User',
-      joinedDate: '2024-02-28',
-      lastActive: '1 week ago',
-      avatar: 'TB'
-    },
-    {
-      id: 6,
-      name: 'Emily Davis',
-      email: 'emily.davis@example.com',
-      phone: '+1 234 567 8905',
-      status: 'active',
-      role: 'Premium User',
-      joinedDate: '2024-03-12',
-      lastActive: '30 mins ago',
-      avatar: 'ED'
-    },
-    {
-      id: 7,
-      name: 'David Wilson',
-      email: 'david.w@example.com',
-      phone: '+1 234 567 8906',
-      status: 'active',
-      role: 'Free User',
-      joinedDate: '2024-01-25',
-      lastActive: '3 hours ago',
-      avatar: 'DW'
-    },
-    {
-      id: 8,
-      name: 'Lisa Anderson',
-      email: 'lisa.a@example.com',
-      phone: '+1 234 567 8907',
-      status: 'inactive',
-      role: 'Premium User',
-      joinedDate: '2024-02-15',
-      lastActive: '5 days ago',
-      avatar: 'LA'
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('https://habibi-fitness-server.onrender.com/api/users');
+      const data = await response.json();
+      
+      if (data.success) {
+        setUsers(data.data || []);
+      } else {
+        setError(data.message || 'Failed to fetch users');
+      }
+    } catch (err) {
+      setError('Failed to fetch users: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-  ])
+  };
 
-  // Filter users based on search and status
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || user.status === statusFilter
-    return matchesSearch && matchesStatus
-  })
+    const matchesSearch = !searchQuery || 
+      user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.phone?.includes(searchQuery) ||
+      user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesPlan = !filterPlan || user.plan === filterPlan;
+    
+    return matchesSearch && matchesPlan;
+  });
 
-  const stats = [
-    { label: 'Total Users', value: users.length, color: 'blue' },
-    { label: 'Active', value: users.filter(u => u.status === 'active').length, color: 'green' },
-    { label: 'Inactive', value: users.filter(u => u.status === 'inactive').length, color: 'yellow' },
-    { label: 'Suspended', value: users.filter(u => u.status === 'suspended').length, color: 'red' }
-  ]
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'inactive':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'suspended':
-        return 'bg-red-100 text-red-800 border-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    let aValue = a[sortBy];
+    let bValue = b[sortBy];
+    
+    if (sortBy === 'created_at' || sortBy === 'updated_at') {
+      aValue = new Date(aValue);
+      bValue = new Date(bValue);
     }
+    
+    if (sortOrder === 'asc') {
+      return aValue > bValue ? 1 : -1;
+    } else {
+      return aValue < bValue ? 1 : -1;
+    }
+  });
+
+  const getPlanColor = (plan) => {
+    const colors = {
+      'Balanced': 'bg-blue-100 text-blue-800',
+      'Low Carb': 'bg-green-100 text-green-800',
+      'Protein Boost': 'bg-red-100 text-red-800',
+      'Vegetarian Kitchen': 'bg-purple-100 text-purple-800',
+      "Chef's Choice": 'bg-yellow-100 text-yellow-800',
+      'Keto': 'bg-orange-100 text-orange-800'
+    };
+    return colors[plan] || 'bg-gray-100 text-gray-800';
+  };
+
+  const getGoalColor = (goal) => {
+    const colors = {
+      'Weight Loss': 'bg-red-100 text-red-800',
+      'Weight Gain': 'bg-green-100 text-green-800',
+      'Staying Fit': 'bg-blue-100 text-blue-800',
+      'Eating Healthy': 'bg-purple-100 text-purple-800',
+      'Keto Diet': 'bg-orange-100 text-orange-800'
+    };
+    return colors[goal] || 'bg-gray-100 text-gray-800';
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const parseMealTypes = (mealtypes) => {
+    if (!mealtypes) return [];
+    if (typeof mealtypes === 'string') {
+      try {
+        return JSON.parse(mealtypes);
+      } catch {
+        return mealtypes.split(',').map(t => t.trim());
+      }
+    }
+    return mealtypes;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading users...</p>
+        </div>
+      </div>
+    );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className={`text-3xl font-bold ${
-            theme === 'dark' ? 'text-white' : 'text-gray-900'
-          }`}>Users Management</h1>
-          <p className={`mt-1 text-sm ${
-            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-          }`}>Manage and monitor all registered users</p>
-        </div>
-        <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add New User
-        </button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, index) => (
-          <div
-            key={index}
-            className={`rounded-xl p-4 border ${
-              theme === 'dark'
-                ? 'bg-gray-900 border-gray-800'
-                : 'bg-white border-gray-200'
-            }`}
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 text-xl mb-4">❌ Error</div>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchUsers}
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
-            <p className={`text-sm ${
-              theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-            }`}>{stat.label}</p>
-            <p className={`text-2xl font-bold mt-1 ${
-              theme === 'dark' ? 'text-white' : 'text-gray-900'
-            }`}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters and Search */}
-      <div className={`rounded-xl p-4 border ${
-        theme === 'dark'
-          ? 'bg-gray-900 border-gray-800'
-          : 'bg-white border-gray-200'
-      }`}>
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              placeholder="Search by name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full px-4 py-2 pl-10 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-                theme === 'dark'
-                  ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-400'
-                  : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-500'
-              }`}
-            />
-            <svg
-              className={`w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 ${
-                theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className={`px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 ${
-              theme === 'dark'
-                ? 'bg-gray-800 border-gray-700 text-white'
-                : 'bg-gray-50 border-gray-300 text-gray-900'
-            }`}
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="suspended">Suspended</option>
-          </select>
-
-          {/* Export Button */}
-          <button className={`px-4 py-2 border rounded-lg font-medium transition-colors flex items-center gap-2 ${
-            theme === 'dark'
-              ? 'border-gray-700 text-gray-300 hover:bg-gray-800'
-              : 'border-gray-300 text-gray-700 hover:bg-gray-50'
-          }`}>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            Export
+            Try Again
           </button>
         </div>
       </div>
+    );
+  }
 
-      {/* Users Table */}
-      <div className={`rounded-xl border overflow-hidden ${
-        theme === 'dark'
-          ? 'bg-gray-900 border-gray-800'
-          : 'bg-white border-gray-200'
-      }`}>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className={
-              theme === 'dark'
-                ? 'bg-gray-800 border-b border-gray-700'
-                : 'bg-gray-50 border-b border-gray-200'
-            }>
-              <tr>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  User
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Contact
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Role
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Status
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Joined Date
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Last Active
-                </th>
-                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${
-                  theme === 'dark' ? 'text-gray-400' : 'text-gray-500'
-                }`}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className={`divide-y ${
-              theme === 'dark' ? 'divide-gray-800' : 'divide-gray-200'
-            }`}>
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className={
-                  theme === 'dark'
-                    ? 'hover:bg-gray-800/50'
-                    : 'hover:bg-gray-50'
-                }>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-green-600 flex items-center justify-center text-white font-semibold">
-                        {user.avatar}
-                      </div>
-                      <div>
-                        <p className={`font-medium ${
-                          theme === 'dark' ? 'text-white' : 'text-gray-900'
-                        }`}>{user.name}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <p className={`text-sm ${
-                        theme === 'dark' ? 'text-gray-300' : 'text-gray-900'
-                      }`}>{user.email}</p>
-                      <p className={`text-sm ${
-                        theme === 'dark' ? 'text-gray-500' : 'text-gray-500'
-                      }`}>{user.phone}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-300' : 'text-gray-900'
-                    }`}>{user.role}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(user.status)}`}>
-                      {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>{user.joinedDate}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`text-sm ${
-                      theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-                    }`}>{user.lastActive}</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <button 
-                        className="p-2 rounded-lg hover:bg-blue-500/10 text-blue-500 transition-colors"
-                        title="View Details"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      </button>
-                      <button 
-                        className="p-2 rounded-lg hover:bg-green-500/10 text-green-500 transition-colors"
-                        title="Edit User"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-                      <button 
-                        className="p-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors"
-                        title="Delete User"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        <div className={`px-6 py-4 border-t flex items-center justify-between ${
-          theme === 'dark'
-            ? 'border-gray-800'
-            : 'border-gray-200'
-        }`}>
-          <p className={`text-sm ${
-            theme === 'dark' ? 'text-gray-400' : 'text-gray-600'
-          }`}>
-            Showing <span className="font-medium">{filteredUsers.length}</span> of <span className="font-medium">{users.length}</span> users
-          </p>
-          <div className="flex gap-2">
-            <button className={`px-3 py-1 rounded-lg border transition-colors ${
-              theme === 'dark'
-                ? 'border-gray-700 text-gray-400 hover:bg-gray-800'
-                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}>
-              Previous
-            </button>
-            <button className="px-3 py-1 rounded-lg bg-green-600 text-white font-medium">
-              1
-            </button>
-            <button className={`px-3 py-1 rounded-lg border transition-colors ${
-              theme === 'dark'
-                ? 'border-gray-700 text-gray-400 hover:bg-gray-800'
-                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}>
-              2
-            </button>
-            <button className={`px-3 py-1 rounded-lg border transition-colors ${
-              theme === 'dark'
-                ? 'border-gray-700 text-gray-400 hover:bg-gray-800'
-                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}>
-              Next
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Users Management</h1>
+              <p className="mt-2 text-gray-600">
+                Manage all registered users ({sortedUsers.length} total)
+              </p>
+            </div>
+            <button
+              onClick={fetchUsers}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
             </button>
           </div>
         </div>
+
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Search */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search Users
+              </label>
+              <input
+                type="text"
+                placeholder="Search by name, phone, or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            {/* Plan Filter */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filter by Plan
+              </label>
+              <select
+                value={filterPlan}
+                onChange={(e) => setFilterPlan(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="">All Plans</option>
+                <option value="Balanced">Balanced</option>
+                <option value="Low Carb">Low Carb</option>
+                <option value="Protein Boost">Protein Boost</option>
+                <option value="Vegetarian Kitchen">Vegetarian Kitchen</option>
+                <option value="Chef's Choice">Chef's Choice</option>
+                <option value="Keto">Keto</option>
+              </select>
+            </div>
+
+            {/* Sort By */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Sort By
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="created_at">Registration Date</option>
+                <option value="name">Name</option>
+                <option value="plan">Plan</option>
+                <option value="goal">Goal</option>
+                <option value="phone">Phone</option>
+              </select>
+            </div>
+
+            {/* Sort Order */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Order
+              </label>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+              >
+                <option value="desc">Newest First</option>
+                <option value="asc">Oldest First</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Users Table */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    User
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Contact
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Plan & Goal
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Preferences
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Stats
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Joined
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {sortedUsers.map((user) => (
+                  <tr key={user.id} className="hover:bg-gray-50">
+                    {/* User Info */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
+                            <span className="text-sm font-medium text-green-800">
+                              {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {user.name || 'No Name'}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            ID: {user.id}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Contact */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {user.phone || 'No Phone'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {user.email || 'No Email'}
+                      </div>
+                      {user.address && (
+                        <div className="text-xs text-gray-400 truncate max-w-xs">
+                          {user.address}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Plan & Goal */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="space-y-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPlanColor(user.plan)}`}>
+                          {user.plan || 'No Plan'}
+                        </span>
+                        <br />
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getGoalColor(user.goal)}`}>
+                          {user.goal || 'No Goal'}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Preferences */}
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        <div className="mb-1">
+                          <span className="font-medium">Meals:</span> {parseMealTypes(user.mealtypes).join(', ') || 'None'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {user.gender} • {user.weight}kg • {user.height}cm
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Stats */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <div className="space-y-1">
+                        <div>BMI: {user.bmi || 'N/A'}</div>
+                        <div>TDEE: {user.tdee || 'N/A'}</div>
+                        <div className="text-xs text-gray-500">
+                          Subscription: {user.subscription || 'None'}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Joined Date */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {formatDate(user.created_at)}
+                    </td>
+
+                    {/* Actions */}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => router.push(`/cms/users/${user.id}`)}
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => {
+                            // Copy user ID to clipboard
+                            navigator.clipboard.writeText(user.id);
+                            alert('User ID copied to clipboard!');
+                          }}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Copy ID
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Empty State */}
+          {sortedUsers.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-gray-400 text-6xl mb-4">👥</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No users found</h3>
+              <p className="text-gray-500">
+                {searchQuery || filterPlan 
+                  ? 'Try adjusting your search or filter criteria.' 
+                  : 'No users have registered yet.'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Summary Stats */}
+        {sortedUsers.length > 0 && (
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="text-2xl font-bold text-gray-900">{sortedUsers.length}</div>
+              <div className="text-sm text-gray-500">Total Users</div>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="text-2xl font-bold text-blue-600">
+                {sortedUsers.filter(u => u.plan === 'Balanced').length}
+              </div>
+              <div className="text-sm text-gray-500">Balanced Plan</div>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="text-2xl font-bold text-green-600">
+                {sortedUsers.filter(u => u.plan === 'Low Carb').length}
+              </div>
+              <div className="text-sm text-gray-500">Low Carb Plan</div>
+            </div>
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <div className="text-2xl font-bold text-red-600">
+                {sortedUsers.filter(u => u.plan === 'Protein Boost').length}
+              </div>
+              <div className="text-sm text-gray-500">Protein Boost</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
-  )
+  );
 }
-
-export default UsersPage

@@ -4,16 +4,57 @@ const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
 // Middleware
-app.use(cors());
+// CORS configuration
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      "https://habibi-fitness-web.vercel.app",
+      "http://localhost:3000",
+      "http://localhost:8081",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://192.168.1.100:3000", // Add your local IP if needed
+    ];
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Supabase configuration
-const supabaseUrl = process.env.SUPABASE_URL || "https://rvbfguamiityqlheqjnu.supabase.co";
-const supabaseKey = process.env.SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2YmZndWFtaXR5dXFsaGVxanVucSIsInJpZCI6InF1ZXJ5c3V6a29sbG1kIiwiZXhwIjoxNzI5MjY5OTk5fQ.Vf7i5YpZ346aLjV-o6h39CwGjZ3e6U0v8N7FhJ6uI4";
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+console.log('🔍 Environment check:');
+console.log('SUPABASE_URL:', supabaseUrl ? '✅ Set' : '❌ Missing');
+console.log('SUPABASE_ANON_KEY:', supabaseKey ? '✅ Set' : '❌ Missing');
+console.log('PORT:', process.env.PORT || 10000);
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ Missing required environment variables!');
+  console.error('Please set SUPABASE_URL and SUPABASE_ANON_KEY');
+  process.exit(1);
+}
+
 const supabase = createClient(supabaseUrl, supabaseKey);
+console.log('✅ Supabase client created successfully');
 
 // Helper function to populate user_meals table with individual meal assignments
 async function populateUserMeals(userId, schedule, supabase) {
@@ -60,7 +101,7 @@ async function populateUserMeals(userId, schedule, supabase) {
       if (insertError) {
         console.error('Error populating user_meals:', insertError);
       } else {
-        console.log(`Successfully populated ${mealAssignments.length} meal assignments for user ${userId}`);
+        console.log(`s`);
       }
     }
   } catch (error) {
@@ -259,11 +300,11 @@ app.get('/api/users', async (req, res) => {
 // Create new user (registration)
 app.post('/api/users', async (req, res) => {
   try {
-    console.log('Received user registration request:', req.body);
+    console.log('Received user registration request:');
     const userData = req.body;
     
-    // Validate required fields
-    const requiredFields = ['name', 'phone', 'plan', 'goal', 'weight', 'height', 'gender'];
+    // Validate required fields - only phone and name are truly required
+    const requiredFields = ['name', 'phone'];
     const missingFields = requiredFields.filter(field => !userData[field]);
     
     if (missingFields.length > 0) {
@@ -273,12 +314,19 @@ app.post('/api/users', async (req, res) => {
       });
     }
     
+    // Set defaults for optional fields if missing
+    userData.plan = userData.plan || 'Balanced';
+    userData.goal = userData.goal || 'Staying Fit';
+    userData.weight = userData.weight || '70';
+    userData.height = userData.height || '170';
+    userData.gender = userData.gender || 'Male';
+    
     // Convert mealtypes array to JSON string if it exists
     if (userData.mealtypes && Array.isArray(userData.mealtypes)) {
       userData.mealtypes = JSON.stringify(userData.mealtypes);
     }
     
-    console.log('Attempting to insert user data:', userData);
+    console.log('s');
     
     const { data, error } = await supabase
       .from('users')
@@ -290,7 +338,7 @@ app.post('/api/users', async (req, res) => {
       throw error;
     }
 
-    console.log('User created successfully:', data);
+    console.log('s');
 
     res.status(201).json({
       success: true,
@@ -389,22 +437,163 @@ app.put('/api/users/:id', async (req, res) => {
   }
 });
 
+// Save/Update Expo Push Token
+app.put('/api/users/:id/push-token', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { pushToken } = req.body;
+
+    if (!pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Push token is required'
+      });
+    }
+
+    console.log(`Saving push token for user ${id}:`, pushToken);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ push_token: pushToken, push_token_updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Push token saved successfully'
+    });
+  } catch (error) {
+    console.error('Error saving push token:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to save push token'
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     message: 'Server is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    cors: 'CORS enabled for localhost:3000'
   });
 });
 
-// Test endpoint to verify server is loading changes
+// Simple test endpoint
 app.get('/api/test', (req, res) => {
   res.json({
     success: true,
-    message: 'Test endpoint working - server updated!',
-    timestamp: new Date().toISOString()
+    message: 'Test endpoint working - server updated with timezone fixes!',
+    origin: req.get('Origin') || 'No origin header',
+    timestamp: new Date().toISOString(),
+    timezone: 'Asia/Karachi (UTC+5)'
   });
+});
+
+// Debug endpoint to test date calculation
+app.get('/api/debug-date/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { date } = req.query;
+    
+    console.log('🔍 DEBUG: Testing date calculation for user:', userId, 'date:', date);
+    
+    // Get user's meal schedule
+    const { data: schedule, error } = await supabase
+      .from('meal_schedules')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !schedule) {
+      return res.json({
+        success: false,
+        message: 'No schedule found',
+        error: error?.message
+      });
+    }
+
+    const startDate = new Date(schedule.created_at);
+    console.log('🔍 DEBUG: Schedule created at:', startDate.toISOString());
+    
+    // Calculate which week contains the requested date
+    const requestedDate = new Date(date);
+    const daysDiff = Math.floor((requestedDate - startDate) / (1000 * 60 * 60 * 24));
+    const targetWeekIndex = Math.floor(daysDiff / 7);
+    
+    const debugInfo = {
+      userId: userId,
+      requestedDate: date,
+      scheduleCreatedAt: startDate.toISOString(),
+      daysDiff: daysDiff,
+      targetWeekIndex: targetWeekIndex,
+      totalWeeksInSchedule: schedule.schedule_data?.weeks?.length || 0,
+      targetWeekExists: !!(schedule.schedule_data?.weeks?.[targetWeekIndex]),
+      scheduleData: schedule.schedule_data,
+      dateCalculations: []
+    };
+
+    if (schedule.schedule_data && schedule.schedule_data.weeks) {
+      // Show all weeks for debugging
+      schedule.schedule_data.weeks.forEach((week, weekIndex) => {
+        if (week.days) {
+          Object.keys(week.days).forEach(dayKey => {
+            const day = week.days[dayKey];
+            
+            const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+            const dayIndex = dayNames.indexOf(dayKey.toLowerCase());
+            if (dayIndex === -1) return;
+            
+            const mealDate = new Date(startDate);
+            mealDate.setDate(startDate.getDate() + (weekIndex * 7) + (dayIndex - startDate.getDay()));
+            
+            // Use simple UTC+5 offset for Pakistan timezone
+            const pakistanOffset = 5 * 60; // 5 hours in minutes
+            const pakistanTime = new Date(mealDate.getTime() + (pakistanOffset * 60 * 1000));
+            const mealDateStr = pakistanTime.toISOString().split('T')[0];
+            
+            debugInfo.dateCalculations.push({
+              dayKey: dayKey,
+              dayIndex: dayIndex,
+              weekIndex: weekIndex,
+              originalDate: mealDate.toISOString(),
+              pakistanDate: mealDateStr,
+              matchesRequested: mealDateStr === date,
+              mealsInDay: Object.keys(day).length,
+              isTargetWeek: weekIndex === targetWeekIndex
+            });
+          });
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      debug: debugInfo
+    });
+
+  } catch (error) {
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Get all meals with full details for data analysis
@@ -638,24 +827,15 @@ app.post('/api/schedule/generate', async (req, res) => {
     }
 
     // Parse mealtypes from JSON string if it exists
-    console.log('Original userData.mealtypes:', userData.mealtypes, 'Type:', typeof userData.mealtypes);
-    
     if (userData.mealtypes && typeof userData.mealtypes === 'string') {
       try {
         userData.mealtypes = JSON.parse(userData.mealtypes);
-        console.log('Parsed mealtypes:', userData.mealtypes);
       } catch (parseError) {
-        console.error('Error parsing mealtypes:', parseError);
         userData.mealtypes = ['lunch', 'dinner']; // fallback
-        console.log('Using fallback mealtypes:', userData.mealtypes);
       }
     } else if (!userData.mealtypes) {
       userData.mealtypes = ['lunch', 'dinner']; // fallback
-      console.log('No mealtypes found, using fallback:', userData.mealtypes);
     }
-
-    console.log('Final userData.mealtypes:', userData.mealtypes, 'Type:', typeof userData.mealtypes);
-    console.log('User data after parsing:', userData);
 
     // Get all meals
     const { data: meals, error: mealsError } = await supabase
@@ -666,8 +846,6 @@ app.post('/api/schedule/generate', async (req, res) => {
       console.error('Error fetching meals:', mealsError);
       throw mealsError;
     }
-
-    console.log('Fetched meals count:', meals?.length || 0);
     
     // Parse dietary_tags if it's stored as JSON string
     if (meals && meals.length > 0) {
@@ -702,16 +880,6 @@ app.post('/api/schedule/generate', async (req, res) => {
           meal.price = parseFloat(meal.price) || 9.99;
         }
       });
-      
-      console.log('Sample meal structure:', {
-        id: meals[0].id,
-        name: meals[0].name,
-        category: meals[0].category,
-        rating: meals[0].rating,
-        price: meals[0].price,
-        dietary_tags: meals[0].dietary_tags,
-        dietary_tags_type: typeof meals[0].dietary_tags
-      });
     }
 
     // Import and use meal scheduler
@@ -719,7 +887,7 @@ app.post('/api/schedule/generate', async (req, res) => {
     const scheduler = new MealScheduler();
     
     // Generate schedule
-    console.log('Generating schedule for user:', userData.id, 'with', meals?.length || 0, 'meals');
+    console.log('Generating schedule for user:');
     
     if (!meals || meals.length === 0) {
       return res.status(400).json({
@@ -730,22 +898,9 @@ app.post('/api/schedule/generate', async (req, res) => {
     
     let schedule;
     try {
-      console.log('=== CALLING MEAL SCHEDULER ===');
-      console.log('User data:', userData);
-      console.log('Meals count:', meals?.length || 0);
-      console.log('Weeks:', weeks);
-      
       schedule = scheduler.generateMealSchedule(userData, meals, weeks);
-      
-      console.log('=== MEAL SCHEDULER COMPLETED ===');
-      console.log('Generated schedule successfully');
-      console.log('Schedule weeks:', schedule.weeks?.length || 0);
-      console.log('First week days:', Object.keys(schedule.weeks?.[0]?.days || {}));
-      console.log('First week total meals:', schedule.weeks?.[0]?.totalMeals || 0);
     } catch (schedulerError) {
-      console.error('=== MEAL SCHEDULER ERROR ===');
-      console.error('Error in meal scheduler:', schedulerError);
-      console.error('Error stack:', schedulerError.stack);
+      console.error('Meal scheduler error:', schedulerError.message);
       throw new Error(`Meal scheduler failed: ${schedulerError.message}`);
     }
 
@@ -963,9 +1118,9 @@ app.post('/api/schedule/swap-meals', async (req, res) => {
       });
     }
 
-    console.log('Swapping meals for user:', userId);
-    console.log('Source:', sourceMeal);
-    console.log('Target:', targetMeal);
+    console.log('Swapping meals for user:');
+    console.log('Source:');
+    console.log('Target:');
 
     // Get user's current schedule
     const { data: scheduleRecord, error: fetchError } = await supabase
@@ -1058,7 +1213,7 @@ app.get('/api/recommendations/plan/:plan', async (req, res) => {
     const { plan } = req.params;
     const { goal } = req.query; // Optional goal parameter
     
-    console.log(`Fetching recommendations for plan: ${plan}, goal: ${goal || 'none'}`);
+    console.log(`Fetching recommendations for plan`);
 
     // Get all meals
     const { data: meals, error: mealsError } = await supabase
@@ -1266,6 +1421,8 @@ app.get('/api/notifications/user/:userId', async (req, res) => {
     const { userId } = req.params;
     const { unreadOnly } = req.query;
 
+    console.log(`📬 Fetching notifications for user ${userId}, unreadOnly: ${unreadOnly}`);
+
     let query = supabase
       .from('notifications')
       .select('*')
@@ -1278,16 +1435,27 @@ app.get('/api/notifications/user/:userId', async (req, res) => {
 
     const { data: notifications, error } = await query;
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Supabase error:', error);
+      throw error;
+    }
+
+    const unreadCount = notifications?.filter(n => !n.read).length || 0;
+    
+    console.log(`✅ Found ${notifications?.length || 0} notifications (${unreadCount} unread)`);
+    
+    if (notifications && notifications.length > 0) {
+      console.log('Sample notification:', notifications[0]);
+    }
 
     res.json({
       success: true,
       data: notifications || [],
-      unreadCount: notifications?.filter(n => !n.read).length || 0
+      unreadCount: unreadCount
     });
 
   } catch (error) {
-    console.error('Error fetching notifications:', error);
+    console.error('❌ Error fetching notifications:', error);
     res.status(500).json({
       success: false,
       error: error.message,
@@ -1443,6 +1611,20 @@ app.post('/api/delivery-status/update', async (req, res) => {
 
     if (!mealUpdated) {
       console.log('Meal not found. Looking for mealId:', mealId);
+      console.log('Available meal IDs in schedule:');
+      scheduleData.weeks.forEach((week, wIdx) => {
+        if (week.days) {
+          Object.keys(week.days).forEach(dKey => {
+            const day = week.days[dKey];
+            Object.keys(day).forEach(mKey => {
+              const meal = day[mKey];
+              if (meal && meal.id) {
+                console.log(`  Week ${wIdx}, Day ${dKey}, Meal ${mKey}: ${meal.id} (${meal.name})`);
+              }
+            });
+          });
+        }
+      });
       return res.status(404).json({
         success: false,
         message: 'Meal not found in schedule'
@@ -1450,6 +1632,10 @@ app.post('/api/delivery-status/update', async (req, res) => {
     }
 
     // Save updated schedule back to database
+    console.log('💾 Saving updated schedule to database...');
+    console.log('💾 Schedule record ID:', scheduleRecord.id);
+    console.log('💾 Updated meal data:', JSON.stringify(scheduleData.weeks[0].days.friday.lunch, null, 2));
+    
     const { error: updateError } = await supabase
       .from('meal_schedules')
       .update({
@@ -1459,11 +1645,11 @@ app.post('/api/delivery-status/update', async (req, res) => {
       .eq('id', scheduleRecord.id);
 
     if (updateError) {
-      console.error('Error updating schedule:', updateError);
+      console.error('❌ Error updating schedule:', updateError);
       throw updateError;
     }
 
-    console.log('✅ Meal status updated successfully');
+    console.log('✅ Meal status updated successfully and saved to database');
 
     // Log the status change for tracking (optional table)
     try {
@@ -1479,6 +1665,111 @@ app.post('/api/delivery-status/update', async (req, res) => {
     } catch (logError) {
       console.error('Error logging status change (table might not exist):', logError.message);
       // Don't fail the request if logging fails
+    }
+
+    // Send push notification to user about status change
+    try {
+      // Get meal name from the updated schedule
+      let mealName = 'Your meal';
+      scheduleData.weeks.forEach((week) => {
+        Object.keys(week.days).forEach((dKey) => {
+          const day = week.days[dKey];
+          Object.keys(day).forEach((mKey) => {
+            const meal = day[mKey];
+            if (meal && meal.id === mealId) {
+              mealName = meal.name;
+            }
+          });
+        });
+      });
+
+      // Create status message
+      const statusMessages = {
+        'pending': `Your order for "${mealName}" is confirmed and will be prepared soon.`,
+        'preparing': `Good news! "${mealName}" is being prepared in our kitchen.`,
+        'out_for_delivery': `Your "${mealName}" is out for delivery! It will arrive soon.`,
+        'delivered': `Your "${mealName}" has been delivered. Enjoy your meal!`,
+        'cancelled': `Your order for "${mealName}" has been cancelled.`,
+      };
+
+      const notificationTitle = 'Order Status Update';
+      const notificationMessage = statusMessages[status] || `Your meal status has been updated to ${status}`;
+
+      // Save notification to database
+      const { error: notifError } = await supabase
+        .from('notifications')
+        .insert([{
+          user_id: userId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: 'delivery',
+          priority: status === 'delivered' ? 'high' : 'normal',
+          read: false,
+          sent_at: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        }]);
+
+      if (notifError) {
+        console.error('Error saving notification:', notifError);
+      } else {
+        console.log('✅ Notification created in database');
+      }
+
+      // Send actual push notification via Expo Push API
+      try {
+        // Get user's push token
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('push_token')
+          .eq('id', userId)
+          .single();
+
+        if (userError || !user?.push_token) {
+          console.log('⚠️ No push token found for user. User needs to open app first.');
+        } else {
+          console.log('📱 Found push token, sending push notification...');
+          
+          // Send push notification via Expo
+          const pushMessage = {
+            to: user.push_token,
+            sound: 'default',
+            title: notificationTitle,
+            body: notificationMessage,
+            data: { 
+              type: 'delivery',
+              screen: '/orderhistory',
+              mealId: mealId,
+              userId: userId
+            },
+            priority: 'high',
+            channelId: 'default',
+          };
+
+          const pushResponse = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(pushMessage),
+          });
+
+          const pushResult = await pushResponse.json();
+          
+          if (pushResult.data && pushResult.data[0]?.status === 'ok') {
+            console.log('✅ Push notification sent successfully!');
+          } else {
+            console.error('❌ Push notification failed:', pushResult);
+          }
+        }
+      } catch (pushError) {
+        console.error('❌ Error sending push notification:', pushError);
+        // Don't fail the main request
+      }
+
+    } catch (notifError) {
+      console.error('Error in notification flow:', notifError);
+      // Don't fail the main request if notification fails
     }
 
     res.json({
@@ -1533,12 +1824,14 @@ app.get('/api/delivery-status/date/:date', async (req, res) => {
       });
     }
 
-    console.log(`Found ${schedules.length} schedules`);
 
     // Process schedules and extract meals for the specified date
     const deliveries = [];
     const targetDate = new Date(date);
     const targetDay = targetDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+    console.log('🔍 Delivery status by date - requested date:', date);
+    console.log('🔍 Delivery status by date - target day:', targetDay);
 
     schedules.forEach(schedule => {
       const user = schedule.users;
@@ -1556,20 +1849,27 @@ app.get('/api/delivery-status/date/:date', async (req, res) => {
       // Parse schedule_data object with weeks structure
       if (schedule.schedule_data && schedule.schedule_data.weeks) {
         const startDate = new Date(schedule.created_at);
+        console.log('🔍 Schedule start date:', startDate.toISOString());
         
         schedule.schedule_data.weeks.forEach((week, weekIndex) => {
           if (week.days) {
             Object.keys(week.days).forEach(dayKey => {
               const day = week.days[dayKey];
               
-              // Calculate the date for this day
+              // Calculate the date for this day using Pakistan timezone
               const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
               const dayIndex = dayNames.indexOf(dayKey.toLowerCase());
               if (dayIndex === -1) return;
               
               const mealDate = new Date(startDate);
               mealDate.setDate(startDate.getDate() + (weekIndex * 7) + (dayIndex - startDate.getDay()));
-              const mealDateStr = mealDate.toISOString().split('T')[0];
+              
+              // Use simple UTC+5 offset for Pakistan timezone
+              const pakistanOffset = 5 * 60; // 5 hours in minutes
+              const pakistanTime = new Date(mealDate.getTime() + (pakistanOffset * 60 * 1000));
+              const mealDateStr = pakistanTime.toISOString().split('T')[0];
+              
+              console.log(`🔍 Day ${dayKey} (${dayIndex}): ${mealDate.toISOString()} -> ${mealDateStr} (requested: ${date})`);
               
               // Check if this day matches our target date
               if (mealDateStr === date) {
@@ -1638,7 +1938,7 @@ app.get('/api/delivery-status/user/:userId', async (req, res) => {
     const { userId } = req.params;
     const { date, status } = req.query;
 
-    console.log('Fetching delivery status for user:', userId);
+    console.log('🔍 UPDATED SERVER CODE - Fetching delivery status for user:', userId, 'date:', date);
 
     // Get user's meal schedule
     const { data: schedule, error } = await supabase
@@ -1671,36 +1971,75 @@ app.get('/api/delivery-status/user/:userId', async (req, res) => {
       console.error('Error fetching user:', userError);
     }
 
-    // Extract all meals with their statuses from schedule_data array
+    // Extract all meals with their statuses from schedule_data weeks structure
     const meals = [];
 
-    if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
-      schedule.schedule_data.forEach(scheduledMeal => {
-        // Filter by date if specified
-        const dateMatch = !date || scheduledMeal.date === date;
-        // Filter by status if specified
-        const mealStatus = scheduledMeal.status || 'pending';
-        const statusMatch = !status || mealStatus === status;
+    if (schedule.schedule_data && schedule.schedule_data.weeks) {
+      console.log('🔍 SIMPLE APPROACH - Finding meals for day of week:', date);
+      
+      // Get the day of the week for the requested date
+      const requestedDate = new Date(date);
+      const requestedDayOfWeek = requestedDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const requestedDayName = dayNames[requestedDayOfWeek];
+      
+      console.log(`🔍 Requested date ${date} is a ${requestedDayName} (day ${requestedDayOfWeek})`);
+      
+      // Find the first week that has this day of the week
+      for (let weekIndex = 0; weekIndex < schedule.schedule_data.weeks.length; weekIndex++) {
+        const week = schedule.schedule_data.weeks[weekIndex];
         
-        if (dateMatch && statusMatch) {
-          meals.push({
-            id: scheduledMeal.meal_id || scheduledMeal.id,
-            type: scheduledMeal.meal_type || scheduledMeal.type || 'unknown',
-            name: scheduledMeal.meal_name || scheduledMeal.name || 'Unknown Meal',
-            date: scheduledMeal.date,
-            status: mealStatus,
-            calories: scheduledMeal.calories || 0,
-            protein: scheduledMeal.protein || 0,
-            carbs: scheduledMeal.carbs || 0,
-            fat: scheduledMeal.fat || 0,
-            estimatedDelivery: scheduledMeal.estimated_delivery || 'TBD',
-            notes: scheduledMeal.delivery_notes || scheduledMeal.notes || '',
-            statusUpdatedAt: scheduledMeal.status_updated_at || null,
-            deliveredAt: scheduledMeal.delivered_at || null
+        if (week.days && week.days[requestedDayName]) {
+          console.log(`✅ Found ${requestedDayName} in week ${weekIndex}`);
+          const day = week.days[requestedDayName];
+          
+          // Add all meals from this day
+          Object.keys(day).forEach(mealKey => {
+            const meal = day[mealKey];
+            if (meal && meal.id) {
+              // Check if meal has status field (added by updates), otherwise default to 'pending'
+              const mealStatus = meal.status || 'pending';
+              const statusMatch = !status || mealStatus === status;
+              
+              console.log(`🔍 Meal ${meal.id} (${meal.name}): status=${mealStatus}, statusMatch=${statusMatch}`);
+              
+              if (statusMatch) {
+                console.log(`✅ Adding meal ${meal.id} to results`);
+                meals.push({
+                  id: meal.id,
+                  type: meal.category || 'unknown',
+                  name: meal.name || 'Unknown Meal',
+                  date: date,
+                  status: mealStatus,
+                  calories: meal.calories || 0,
+                  protein: meal.protein || 0,
+                  carbs: meal.carbs || 0,
+                  fat: meal.fat || 0,
+                  estimatedDelivery: 'TBD',
+                  notes: '',
+                  statusUpdatedAt: null,
+                  deliveredAt: null,
+                  weekIndex: weekIndex,
+                  dayKey: requestedDayName,
+                  mealKey: mealKey
+                });
+              }
+            }
           });
+          
+          // Found meals, we're done
+          console.log(`✅ Found ${meals.length} meals for ${requestedDayName} in week ${weekIndex}`);
+          break;
         }
-      });
+      }
+      
+      if (meals.length === 0) {
+        console.log(`❌ No ${requestedDayName} meals found in any week`);
+      }
     }
+
+    console.log(`🔍 User delivery status - Final result: ${meals.length} meals found for user ${userId} on date ${date}`);
+    console.log(`🚨 CRITICAL DEBUG: Meals array:`, meals.map(m => ({ id: m.id, name: m.name, status: m.status, date: m.date })));
 
     res.json({
       success: true,
@@ -1766,13 +2105,36 @@ app.get('/api/delivery-status', async (req, res) => {
     schedules.forEach(schedule => {
       const userData = schedule.users;
       
-      // Parse schedule_data array
-      if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
-        schedule.schedule_data.forEach(scheduledMeal => {
+      // Parse schedule_data weeks structure
+      if (schedule.schedule_data && schedule.schedule_data.weeks) {
+        const startDate = new Date(schedule.created_at);
+        
+        schedule.schedule_data.weeks.forEach((week, weekIndex) => {
+          if (week.days) {
+            Object.keys(week.days).forEach(dayKey => {
+              const day = week.days[dayKey];
+              
+              // Calculate the date for this day using Pakistan timezone
+              const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+              const dayIndex = dayNames.indexOf(dayKey.toLowerCase());
+              if (dayIndex === -1) return;
+              
+              const mealDate = new Date(startDate);
+              mealDate.setDate(startDate.getDate() + (weekIndex * 7) + (dayIndex - startDate.getDay()));
+              
+              // Use simple UTC+5 offset for Pakistan timezone
+              const pakistanOffset = 5 * 60; // 5 hours in minutes
+              const pakistanTime = new Date(mealDate.getTime() + (pakistanOffset * 60 * 1000));
+              const mealDateStr = pakistanTime.toISOString().split('T')[0];
+              
+              // Process all meals for this day
+              Object.keys(day).forEach(mealKey => {
+                const meal = day[mealKey];
+                if (meal && meal.id) {
           // Filter by date if specified
-          const dateMatch = !date || scheduledMeal.date === date;
+                  const dateMatch = !date || mealDateStr === date;
           // Filter by status if specified
-          const mealStatus = scheduledMeal.status || 'pending';
+                  const mealStatus = meal.status || 'pending';
           const statusMatch = !status || mealStatus === status;
           
           if (dateMatch && statusMatch) {
@@ -1781,15 +2143,22 @@ app.get('/api/delivery-status', async (req, res) => {
               userName: userData?.name || 'Unknown User',
               email: userData?.email || '',
               phone: userData?.phone || '',
-              mealId: scheduledMeal.meal_id || scheduledMeal.id,
-              mealName: scheduledMeal.meal_name || scheduledMeal.name || 'Unknown Meal',
-              mealType: scheduledMeal.meal_type || scheduledMeal.type || 'unknown',
-              date: scheduledMeal.date,
+                      mealId: meal.id,
+                      mealName: meal.name || 'Unknown Meal',
+                      mealType: meal.category || meal.type || 'unknown',
+                      date: mealDateStr,
               status: mealStatus,
-              calories: scheduledMeal.calories || 0,
-              estimatedDelivery: scheduledMeal.estimated_delivery || 'TBD',
-              notes: scheduledMeal.delivery_notes || scheduledMeal.notes || '',
-              statusUpdatedAt: scheduledMeal.status_updated_at || null
+                      calories: meal.calories || 0,
+                      estimatedDelivery: meal.estimated_delivery || 'TBD',
+                      notes: meal.delivery_notes || meal.notes || '',
+                      statusUpdatedAt: meal.status_updated_at || null,
+                      weekIndex: weekIndex,
+                      dayKey: dayKey,
+                      mealKey: mealKey
+                    });
+                  }
+                }
+              });
             });
           }
         });
@@ -1859,24 +2228,28 @@ app.post('/api/delivery-status/batch-update', async (req, res) => {
           continue;
         }
 
-        // Update meal status in array
-        let scheduleData = scheduleRecord.schedule_data;
+        // Update meal status in weeks structure
+        let scheduleData = JSON.parse(JSON.stringify(scheduleRecord.schedule_data)); // Deep clone
         let updated = false;
 
-        if (Array.isArray(scheduleData)) {
-          scheduleData = scheduleData.map(meal => {
-            const mealIdMatch = (meal.meal_id === mealId || meal.id === mealId);
-            if (mealIdMatch) {
+        if (scheduleData && scheduleData.weeks) {
+          scheduleData.weeks.forEach((week, wIdx) => {
+            if (week.days) {
+              Object.keys(week.days).forEach(dKey => {
+                const day = week.days[dKey];
+                Object.keys(day).forEach(mKey => {
+                  const meal = day[mKey];
+                  if (meal && meal.id === mealId) {
+                    // Found the meal - update it
+                    meal.status = status;
+                    meal.status_updated_at = new Date().toISOString();
+                    if (notes) meal.delivery_notes = notes;
+                    if (status === 'delivered') meal.delivered_at = new Date().toISOString();
               updated = true;
-              return {
-                ...meal,
-                status: status,
-                status_updated_at: new Date().toISOString(),
-                delivery_notes: notes || meal.delivery_notes || meal.notes || '',
-                delivered_at: status === 'delivered' ? new Date().toISOString() : meal.delivered_at
-              };
+                  }
+                });
+              });
             }
-            return meal;
           });
         }
 
@@ -1954,11 +2327,31 @@ app.get('/api/delivery-status/stats', async (req, res) => {
     };
 
     schedules.forEach(schedule => {
-      // Parse schedule_data array
-      if (schedule.schedule_data && Array.isArray(schedule.schedule_data)) {
-        schedule.schedule_data.forEach(scheduledMeal => {
-          const dateStr = scheduledMeal.date;
-          
+      // Parse schedule_data weeks structure
+      if (schedule.schedule_data && schedule.schedule_data.weeks) {
+        const startDate = new Date(schedule.created_at);
+        
+        schedule.schedule_data.weeks.forEach((week, weekIndex) => {
+          if (week.days) {
+            Object.keys(week.days).forEach(dayKey => {
+              const day = week.days[dayKey];
+              
+              // Calculate the date for this day using Pakistan timezone
+              const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+              const dayIndex = dayNames.indexOf(dayKey.toLowerCase());
+              if (dayIndex === -1) return;
+              
+              const mealDate = new Date(startDate);
+              mealDate.setDate(startDate.getDate() + (weekIndex * 7) + (dayIndex - startDate.getDay()));
+              
+              // Convert to Pakistan timezone for comparison
+              const pakistanDate = new Date(mealDate.toLocaleString("en-US", {timeZone: "Asia/Karachi"}));
+              const dateStr = pakistanDate.toISOString().split('T')[0];
+              
+              // Process all meals for this day
+              Object.keys(day).forEach(mealKey => {
+                const meal = day[mealKey];
+                if (meal && meal.id) {
           // Filter by date range if provided
           if (startDate && dateStr < startDate) return;
           if (endDate && dateStr > endDate) return;
@@ -1966,17 +2359,21 @@ app.get('/api/delivery-status/stats', async (req, res) => {
           stats.totalOrders++;
           
           // Count by status
-          const status = scheduledMeal.status || 'pending';
+                  const status = meal.status || 'pending';
           stats.byStatus[status] = (stats.byStatus[status] || 0) + 1;
           
           // Count by meal type
-          const mealType = scheduledMeal.meal_type || scheduledMeal.type || 'unknown';
+                  const mealType = meal.category || meal.type || 'unknown';
           if (stats.byMealType[mealType] !== undefined) {
             stats.byMealType[mealType] = (stats.byMealType[mealType] || 0) + 1;
           }
           
           // Count by date
           stats.byDate[dateStr] = (stats.byDate[dateStr] || 0) + 1;
+                }
+              });
+            });
+          }
         });
       }
     });
@@ -1998,10 +2395,11 @@ app.get('/api/delivery-status/stats', async (req, res) => {
 });
 
 // Start server
+try {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Express Server running on port ${PORT}`);
   console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
-  console.log(`📱 Mobile access: http://192.168.0.1:${PORT}/api`);
+  console.log(`📱 Mobile access: http://192.168.18.28:${PORT}/api`);
   console.log(`\n📬 Notification Endpoints:`);
   console.log(`   POST /api/notifications/send`);
   console.log(`   GET  /api/notifications/user/:userId`);
@@ -2014,8 +2412,23 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /api/delivery-status/user/:userId`);
   console.log(`   POST /api/delivery-status/batch-update`);
   console.log(`   GET  /api/delivery-status/stats`);
-  console.log(`\n⚠️  Make sure Next.js is running on port 5000`);
+  console.log(`\n⚠️  Make sure Next.js is running on port 3000`);
   console.log(`   Next.js dev: npm run dev`);
+  });
+} catch (error) {
+  console.error('❌ Failed to start server:', error);
+  process.exit(1);
+}
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
 module.exports = app;

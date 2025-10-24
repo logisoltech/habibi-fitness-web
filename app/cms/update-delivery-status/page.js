@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useTheme } from '../contexts/ThemeContext'
-import { fetchDeliveriesByDate, updateMealStatus } from '../utils/deliveryApi'
+import { fetchDeliveriesByDate, updateMealStatus, fetchUserDeliveryStatus } from '../utils/deliveryApi'
 
 const UpdateDeliveryStatus = () => {
   const { theme } = useTheme()
@@ -67,16 +67,43 @@ const UpdateDeliveryStatus = () => {
         return
       }
       
-      // Now get delivery status to overlay
+      // Now get delivery status to overlay using deliveryApi
       try {
-        const deliveryResponse = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${userId}?date=${selectedDate}`)
-        const deliveryData = await deliveryResponse.json()
+        console.log('🔍 CMS: Fetching delivery status for user:', userId, 'date:', selectedDate);
+        const deliveryData = await fetchUserDeliveryStatus(userId, { date: selectedDate })
         
         console.log('🔍 CMS: Delivery status response:', deliveryData)
+        
+        // If no meals found, try different date formats
+        if (!deliveryData.data?.meals || deliveryData.data.meals.length === 0) {
+          console.log('🔍 CMS: No meals found, trying different date formats...');
+          
+          const alternativeDates = [
+            new Date().toISOString().split('T')[0], // Today in UTC
+            new Date().toLocaleDateString('en-CA'), // Today in local timezone
+            new Date(selectedDate).toISOString().split('T')[0] // Selected date in UTC
+          ];
+          
+          for (const altDate of alternativeDates) {
+            try {
+              console.log(`🔍 CMS: Trying alternative date: ${altDate}`);
+              const altData = await fetchUserDeliveryStatus(userId, { date: altDate });
+              if (altData.data?.meals && altData.data.meals.length > 0) {
+                console.log(`✅ CMS: Found ${altData.data.meals.length} meals with date: ${altDate}`);
+                deliveryData.data = altData.data;
+                break;
+              }
+            } catch (altError) {
+              console.log(`❌ CMS: Alternative date ${altDate} failed:`, altError.message);
+            }
+          }
+        }
         
         // Overlay delivery status on meals
         const mealsWithStatus = overlayDeliveryStatusOnMeals(todayMeals, deliveryData.data?.meals || [])
         console.log('🔍 CMS: Meals with status overlay:', mealsWithStatus)
+        console.log('🔍 CMS: Delivery status data:', deliveryData.data?.meals || [])
+        console.log('🔍 CMS: Today\'s meals from schedule:', todayMeals)
         
         // Filter by status if needed
         let filteredMeals = mealsWithStatus
@@ -144,12 +171,18 @@ const UpdateDeliveryStatus = () => {
 
   // Overlay delivery status on meal data
   const overlayDeliveryStatusOnMeals = (scheduleMeals, deliveryMeals) => {
+    console.log('🔍 Overlay Debug - Schedule meals:', scheduleMeals.map(m => ({ id: m.id, name: m.name })));
+    console.log('🔍 Overlay Debug - Delivery meals:', deliveryMeals.map(m => ({ id: m.id, name: m.name })));
+    
     return scheduleMeals.map(scheduleMeal => {
       const deliveryMeal = deliveryMeals.find(deliveryMeal => 
+        deliveryMeal.id === scheduleMeal.id || 
         deliveryMeal.meal_id === scheduleMeal.id || 
         deliveryMeal.meal_name === scheduleMeal.name ||
         deliveryMeal.name === scheduleMeal.name
       )
+      
+      console.log(`🔍 Matching meal ${scheduleMeal.id} (${scheduleMeal.name}):`, deliveryMeal ? 'FOUND' : 'NOT FOUND');
       
       if (deliveryMeal) {
         return {
@@ -278,17 +311,40 @@ const UpdateDeliveryStatus = () => {
       }
       
       // Call the API to update the status
-      await updateMealStatus(
-        selectedMeal.userId,
-        selectedMeal.id,
-        selectedMeal.newStatus,
-        actualDate,
-        selectedMeal.mealType || selectedMeal.type || '',
-        selectedMeal.delivery_notes || '', // notes
-        selectedMeal.mealKey || '', // e.g., "lunch_1"
-        selectedMeal.weekIndex || 0,
-        selectedMeal.dayKey || ''
-      )
+      try {
+        await updateMealStatus(
+          selectedMeal.userId,
+          selectedMeal.id,
+          selectedMeal.newStatus,
+          actualDate,
+          selectedMeal.mealType || selectedMeal.type || '',
+          selectedMeal.delivery_notes || '', // notes
+          selectedMeal.mealKey || '', // e.g., "lunch_1"
+          selectedMeal.weekIndex || 0,
+          selectedMeal.dayKey || ''
+        )
+      } catch (apiError) {
+        console.error('❌ API update failed, using local fallback:', apiError);
+        
+        // Fallback: Update local state only
+        console.log('🔄 Using local fallback for status update...');
+        setDeliveries(prevDeliveries => 
+          prevDeliveries.map(meal => 
+            meal.id === selectedMeal.id 
+              ? { 
+                  ...meal, 
+                  status: selectedMeal.newStatus, 
+                  status_updated_at: new Date().toISOString(),
+                  delivery_notes: selectedMeal.delivery_notes || meal.delivery_notes
+                }
+              : meal
+          )
+        );
+        
+        // Show success message for local update
+        alert(`Status updated locally to "${selectedMeal.newStatus}". Note: This change is not saved to the server.`);
+        return; // Exit early since we handled it locally
+      }
 
       // Show success message
       console.log('✅ Status updated successfully!')
@@ -298,15 +354,47 @@ const UpdateDeliveryStatus = () => {
       // Test delivery status API immediately after update
       console.log('🧪 Testing delivery status after update...')
       try {
-        const testResponse = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${selectedMeal.userId}?date=${actualDate}`);
-        const testData = await testResponse.json();
+        const testData = await fetchUserDeliveryStatus(selectedMeal.userId, { date: actualDate });
         console.log('🧪 Delivery status after update:', testData);
+        
+        // Also test with different date formats
+        console.log('🧪 Testing with different date formats...');
+        const dateFormats = [
+          actualDate,
+          new Date().toISOString().split('T')[0],
+          new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Karachi' })
+        ];
+        
+        for (const dateFormat of dateFormats) {
+          try {
+            const formatData = await fetchUserDeliveryStatus(selectedMeal.userId, { date: dateFormat });
+            console.log(`🧪 Date format ${dateFormat}:`, formatData);
+          } catch (error) {
+            console.error(`🧪 Error with date ${dateFormat}:`, error);
+          }
+        }
       } catch (error) {
         console.error('🧪 Error testing delivery status:', error);
       }
       
+      // Update local state immediately to show the change
+      console.log('🔄 Updating local state immediately...')
+      setDeliveries(prevDeliveries => 
+        prevDeliveries.map(meal => 
+          meal.id === selectedMeal.id 
+            ? { ...meal, status: selectedMeal.newStatus, status_updated_at: new Date().toISOString() }
+            : meal
+        )
+      )
+      
       // Refresh the deliveries list to show updated status
       console.log('🔄 Refreshing deliveries list...')
+      await fetchDeliveries()
+      
+      // Force a complete refresh by clearing and refetching
+      console.log('🔄 Force refreshing data...')
+      setDeliveries([])
+      await new Promise(resolve => setTimeout(resolve, 100)) // Small delay
       await fetchDeliveries()
       
       // Close modal
@@ -363,16 +451,34 @@ const UpdateDeliveryStatus = () => {
           }`}>Track and update meal delivery statuses in real-time</p>
         </div>
         {searchQuery && (
-          <button
-            onClick={fetchDeliveries}
-            disabled={loading}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            {loading ? 'Loading...' : 'Refresh'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={fetchDeliveries}
+              disabled={loading}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {loading ? 'Loading...' : 'Refresh'}
+            </button>
+            <button
+              onClick={async () => {
+                console.log('🔄 Force refreshing all data...');
+                setDeliveries([]);
+                setLoading(true);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await fetchDeliveries();
+              }}
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Force Refresh
+            </button>
+          </div>
         )}
       </div>
 
@@ -439,8 +545,7 @@ const UpdateDeliveryStatus = () => {
                 onClick={async () => {
                   console.log('🧪 Testing delivery status API...');
                   try {
-                    const response = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${searchQuery}?date=${selectedDate}`);
-                    const data = await response.json();
+                    const data = await fetchUserDeliveryStatus(searchQuery, { date: selectedDate });
                     console.log('🧪 Delivery status test result:', data);
                   } catch (error) {
                     console.error('🧪 Delivery status test error:', error);
@@ -462,8 +567,7 @@ const UpdateDeliveryStatus = () => {
                   
                   for (const date of dates) {
                     try {
-                      const response = await fetch(`https://habibi-fitness-server.onrender.com/api/delivery-status/user/${searchQuery}?date=${date}`);
-                      const data = await response.json();
+                      const data = await fetchUserDeliveryStatus(searchQuery, { date: date });
                       console.log(`🧪 Date ${date}:`, data);
                     } catch (error) {
                       console.error(`🧪 Error with date ${date}:`, error);
@@ -474,6 +578,186 @@ const UpdateDeliveryStatus = () => {
                 disabled={!searchQuery}
               >
                 Test Dates
+              </button>
+              <button
+                onClick={async () => {
+                  console.log('🧪 Testing server connectivity...');
+                  try {
+                    // First test if server is accessible
+                    const healthResponse = await fetch('https://habibi-fitness-server.onrender.com/api/health');
+                    console.log('🧪 Server health check:', {
+                      status: healthResponse.status,
+                      ok: healthResponse.ok
+                    });
+                  } catch (error) {
+                    console.error('🧪 Server health check failed:', error);
+                  }
+                  
+                  // Test a known working endpoint
+                  try {
+                    const knownEndpoint = `https://habibi-fitness-server.onrender.com/api/delivery-status/user/${searchQuery}`;
+                    console.log('🧪 Testing known working endpoint:', knownEndpoint);
+                    const knownResponse = await fetch(knownEndpoint);
+                    const knownData = await knownResponse.json();
+                    console.log('🧪 Known endpoint response:', {
+                      status: knownResponse.status,
+                      ok: knownResponse.ok,
+                      data: knownData
+                    });
+                  } catch (error) {
+                    console.error('🧪 Known endpoint test failed:', error);
+                  }
+                  
+                  // Test if we can get a list of available endpoints
+                  try {
+                    console.log('🧪 Testing root API endpoint...');
+                    const rootResponse = await fetch('https://habibi-fitness-server.onrender.com/api/');
+                    const rootData = await rootResponse.text();
+                    console.log('🧪 Root API response:', {
+                      status: rootResponse.status,
+                      ok: rootResponse.ok,
+                      data: rootData
+                    });
+                  } catch (error) {
+                    console.error('🧪 Root API test failed:', error);
+                  }
+                  
+                  // Test the exact endpoint with detailed logging
+                  try {
+                    console.log('🧪 Testing exact endpoint with detailed logging...');
+                    const testUrl = 'https://habibi-fitness-server.onrender.com/api/delivery-status/update';
+                    console.log('🧪 Testing URL:', testUrl);
+                    
+                    const response = await fetch(testUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        userId: searchQuery,
+                        mealId: 'test-meal-id',
+                        status: 'preparing',
+                        date: selectedDate
+                      })
+                    });
+                    
+                    console.log('🧪 Response details:', {
+                      url: testUrl,
+                      status: response.status,
+                      statusText: response.statusText,
+                      ok: response.ok,
+                      headers: Object.fromEntries(response.headers.entries())
+                    });
+                    
+                    const responseText = await response.text();
+                    console.log('🧪 Response body:', responseText);
+                    
+                    try {
+                      const responseJson = JSON.parse(responseText);
+                      console.log('🧪 Parsed JSON:', responseJson);
+                    } catch (parseError) {
+                      console.log('🧪 Response is not JSON:', parseError.message);
+                    }
+                  } catch (error) {
+                    console.error('🧪 Detailed endpoint test failed:', error);
+                  }
+                  
+                  // Test using the working updateMealStatus function with a real meal ID
+                  try {
+                    console.log('🧪 Testing with updateMealStatus function...');
+                    
+                    // First, get a real meal ID from the user's schedule
+                    let realMealId = 'test-meal-id';
+                    if (deliveries && deliveries.length > 0) {
+                      realMealId = deliveries[0].id;
+                      console.log('🧪 Using real meal ID from schedule:', realMealId);
+                      console.log('🧪 Meal details:', deliveries[0]);
+                    } else {
+                      console.log('❌ No deliveries found. Please fetch deliveries first.');
+                      return;
+                    }
+                    
+                    const result = await updateMealStatus(
+                      searchQuery,
+                      realMealId,
+                      'preparing',
+                      selectedDate,
+                      deliveries[0].type || 'lunch',
+                      'Test update',
+                      deliveries[0].mealKey || 'lunch_1',
+                      deliveries[0].weekIndex || 0,
+                      deliveries[0].dayKey || 'monday'
+                    );
+                    console.log('🧪 updateMealStatus result:', result);
+                  } catch (error) {
+                    console.error('🧪 updateMealStatus error:', error);
+                  }
+                  
+                  console.log('🧪 Testing different endpoint variations...');
+                  
+                  // Get a real meal ID for testing
+                  let realMealId = 'test-meal-id';
+                  if (deliveries && deliveries.length > 0) {
+                    realMealId = deliveries[0].id;
+                    console.log('🧪 Using real meal ID for direct fetch test:', realMealId);
+                  }
+                  
+                  const testPayload = {
+                    userId: searchQuery,
+                    mealId: realMealId,
+                    status: 'preparing',
+                    date: selectedDate,
+                    mealType: 'lunch',
+                    notes: 'Test update',
+                    mealKey: 'lunch_1',
+                    weekIndex: 0,
+                    dayKey: 'monday',
+                    timestamp: new Date().toISOString()
+                  };
+                  
+                  const endpoints = [
+                    'https://habibi-fitness-server.onrender.com/api/delivery-status/update',
+                    'https://habibi-fitness-server.onrender.com/delivery-status/update',
+                    'https://habibi-fitness-server.onrender.com/api/meal-status/update',
+                    'https://habibi-fitness-server.onrender.com/api/meals/status/update'
+                  ];
+                  
+                  for (const endpoint of endpoints) {
+                    try {
+                      console.log(`🧪 Testing endpoint: ${endpoint}`);
+                      const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(testPayload)
+                      });
+                      
+                      let data;
+                      let responseText;
+                      try {
+                        responseText = await response.text();
+                        data = JSON.parse(responseText);
+                      } catch (jsonError) {
+                        data = { error: 'Failed to parse JSON response', text: responseText };
+                      }
+                      console.log(`🧪 Response from ${endpoint}:`, {
+                        status: response.status,
+                        ok: response.ok,
+                        statusText: response.statusText,
+                        headers: Object.fromEntries(response.headers.entries()),
+                        rawText: responseText,
+                        parsedData: data
+                      });
+                    } catch (error) {
+                      console.error(`🧪 Error with ${endpoint}:`, error);
+                    }
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors"
+                disabled={!searchQuery}
+              >
+                Test Update API
               </button>
             </div>
           </div>
