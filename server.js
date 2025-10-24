@@ -362,6 +362,79 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
+// Search users by name or phone (must be before /:id route)
+app.get('/api/users/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .or(`name.ilike.%${q}%,phone.ilike.%${q}%`);
+
+    if (error) {
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      data: data || [],
+      message: `Found ${data?.length || 0} users`
+    });
+  } catch (error) {
+    console.error('Error searching users:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to search users'
+    });
+  }
+});
+
+// Get user by ID
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
+      throw error;
+    }
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: data,
+      message: 'User found successfully'
+    });
+  } catch (error) {
+    console.error('Error finding user:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: 'Failed to find user'
+    });
+  }
+});
+
 // Get user by phone number
 app.get('/api/users/phone/:phone', async (req, res) => {
   try {

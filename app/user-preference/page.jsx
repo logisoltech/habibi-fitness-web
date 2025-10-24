@@ -51,6 +51,12 @@ export default function UserPreference() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
+  // Personal information states
+  const [name, setName] = useState(userData.name || "");
+  const [phone, setPhone] = useState(userData.phone || "");
+  const [address, setAddress] = useState(userData.address || "");
+  const [goal, setGoal] = useState(userData.goal || "Staying Fit");
+
   // Map UI IDs to API plan names (matching the .md documentation)
   const planMapping = {
     "balanced": "Balanced",
@@ -157,24 +163,51 @@ export default function UserPreference() {
     });
   };
 
-  const paymentCycles = [
-    {
-      id: "weekly",
-      title: "Weekly",
-      subtitle: "AED 53.9 Per week",
-    },
-    {
-      id: "monthly",
-      title: "Monthly",
-      subtitle: "AED 184.8 Per month",
-      popular: true,
-    },
-    {
-      id: "quarterly",
-      title: "3-Months",
-      subtitle: "AED 526.68 Per quarterly",
-    },
-  ];
+  const calculateDailyRate = () => {
+    return selectedMealTimes.reduce((total, mealId) => {
+      const meal = mealTimes.find(m => m.id === mealId);
+      if (!meal) return total; 
+      
+      let price = meal.dailyPrice;
+      
+      // Apply price modifications based on meal preference
+      if ((selectedMealPreference === "lowcarb" || selectedMealPreference === "protein") && 
+          (mealId === "breakfast" || mealId === "snack")) {
+        price += 10;
+      }
+      
+      return total + price;
+    }, 0);
+  };
+
+  // Fixed pricing as specified
+  const calculatePricing = () => {
+    return {
+      weekly: {
+        id: "weekly",
+        title: "Weekly",
+        totalPrice: 549.99,
+        pricePerDay: 78.57, // 549.99 / 7
+        popular: false,
+      },
+      monthly: {
+        id: "monthly",
+        title: "Monthly",
+        totalPrice: 1899.99,
+        pricePerDay: 63.33, // 1899.99 / 30
+        popular: true,
+      },
+      quarterly: {
+        id: "quarterly",
+        title: "3-Months",
+        totalPrice: 5699.99,
+        pricePerDay: 63.33, // 5699.99 / 90
+        popular: false,
+      },
+    };
+  };
+
+  const paymentCycles = Object.values(calculatePricing());
 
   const handlePaymentCycleChange = (cycleId) => {
     setSelectedPaymentCycle(cycleId);
@@ -189,26 +222,17 @@ export default function UserPreference() {
   };
 
   // Calculate daily rate based on selected meals
-  const calculateDailyRate = () => {
-    return selectedMealTimes.reduce((total, mealId) => {
-      const meal = mealTimes.find(m => m.id === mealId);
-      if (!meal) return total;
-      
-      let price = meal.dailyPrice;
-      
-      // Apply price modifications based on meal preference
-      if ((selectedMealPreference === "lowcarb" || selectedMealPreference === "protein") && 
-          (mealId === "breakfast" || mealId === "snack")) {
-        price += 10;
-      }
-      
-      return total + price;
-    }, 0);
-  };
+  
 
   // Validation function
   const isFormValid = () => {
-    return selectedMealTimes.length >= 2 && selectedWeekDays.length >= 5;
+    return (
+      name.trim() !== "" &&
+      phone.trim() !== "" &&
+      address.trim() !== "" &&
+      selectedMealTimes.length >= 2 && 
+      selectedWeekDays.length >= 5
+    );
   };
 
   useEffect(() => {
@@ -266,16 +290,16 @@ export default function UserPreference() {
 
       // Prepare complete user data for Stripe metadata
       const completeUserData = {
-        name: userData.name,
-        phone: userData.phone,
-        address: userData.address,
-        activity: userData.activity,
+        name: name,
+        phone: phone,
+        address: address,
+        activity: userData.activity || "Moderate",
         plan: planName,
-        goal: userData.goal,
+        goal: goal,
         weight: userData.weight.toString(),
         height: userData.height.toString(),
-        age: userData.age?.toString(),
-        gender: userData.gender,
+        age: userData.age?.toString() || "25",
+        gender: userData.gender || "Male",
         mealcount: selectedMealTimes.length.toString(),
         mealtypes: selectedMealTimes,
         selecteddays: formattedDays,
@@ -286,6 +310,10 @@ export default function UserPreference() {
       };
 
       console.log("🛒 Preparing Stripe checkout with data:", completeUserData);
+
+      // Get fixed pricing for the selected cycle
+      const pricing = calculatePricing();
+      const selectedPricing = pricing[selectedPaymentCycle];
 
       // Create Stripe checkout session
       const response = await fetch('/api/stripe/create-checkout-session', {
@@ -298,6 +326,11 @@ export default function UserPreference() {
           userEmail: userData.email || `${userData.phone}@habibi-fitness.com`,
           userName: userData.name,
           userData: completeUserData,
+          pricing: {
+            amount: Math.round(selectedPricing.totalPrice * 100), // Convert to cents
+            currency: 'aed',
+            description: `${selectedPricing.title} Meal Plan - AED ${selectedPricing.totalPrice}`
+          }
         }),
       });
 
@@ -336,6 +369,68 @@ export default function UserPreference() {
             <h2 className="text-[24px] max-sm:text-[20px] text-gray-600 font-medium">
               What kind of meals do you prefer?
             </h2>
+          </div>
+
+          {/* Personal Information Section */}
+          <div className="bg-white rounded-2xl shadow-sm border p-6 mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Personal Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Enter your full name"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number *
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Enter your phone number"
+                  required
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address *
+                </label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  placeholder="Enter your delivery address"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Fitness Goal
+                </label>
+                <select
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                >
+                  <option value="Staying Fit">Staying Fit</option>
+                  <option value="Weight Loss">Weight Loss</option>
+                  <option value="Weight Gain">Weight Gain</option>
+                  <option value="Eating Healthy">Eating Healthy</option>
+                  <option value="Keto Diet">Keto Diet</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col lg:flex-row gap-8 h-full">
@@ -529,17 +624,15 @@ export default function UserPreference() {
                                 )}
                               </div>
                               <p className="text-sm text-gray-600 max-sm:text-[12px]">
-                                {cycle.subtitle}
+                                AED {cycle.totalPrice} per {cycle.id === 'weekly' ? 'week' : cycle.id === 'monthly' ? 'month' : 'quarter'}
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
                               <div className="text-right">
                                 <div className="font-bold text-gray-900 text-[18px] max-sm:text-[12px]">
-                                  ${calculateDailyRate()}
+                                  AED {cycle.pricePerDay}/day
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  per day
-                                </div>
+                                
                               </div>
                               <div
                                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -605,29 +698,38 @@ export default function UserPreference() {
                   </h3>
 
                   <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
-                        Plan Price
-                      </span>
-                      <span className="font-medium">AED 48</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
-                        Delivery Fee
-                      </span>
-                      <span className="font-medium">AED 1</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
-                        VAT (10%)
-                      </span>
-                      <span className="font-medium">AED 4.9</span>
-                    </div>
-                    <hr className="border-gray-200" />
-                    <div className="flex justify-between text-lg max-sm:text-[14px] font-semibold">
-                      <span>TOTAL</span>
-                      <span>AED 53.9</span>
-                    </div>
+                    {(() => {
+                      const pricing = calculatePricing();
+                      const selectedPricing = pricing[selectedPaymentCycle];
+                      
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
+                              Plan Price ({selectedPricing.title})
+                            </span>
+                            <span className="font-medium">AED {selectedPricing.totalPrice}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
+                              Delivery Fee
+                            </span>
+                            <span className="font-medium">Included</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-500 text-[14px] max-sm:text-[12px]">
+                              VAT (10%)
+                            </span>
+                            <span className="font-medium">Included</span>
+                          </div>
+                          <hr className="border-gray-200" />
+                          <div className="flex justify-between text-lg max-sm:text-[14px] font-semibold">
+                            <span>TOTAL</span>
+                            <span>AED {selectedPricing.totalPrice}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 

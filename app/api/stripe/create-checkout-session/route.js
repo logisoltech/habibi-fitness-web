@@ -1,91 +1,92 @@
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 
+// Initialize Stripe with your secret key
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const { 
-      priceId, 
+    const { paymentCycle, userEmail, userName, userData, pricing } = await request.json();
+
+    console.log('🛒 Creating Stripe checkout session for:', {
       paymentCycle,
       userEmail,
       userName,
-      userData // All the user registration data
-    } = body;
+      userData: {
+        plan: userData.plan,
+        mealcount: userData.mealcount,
+        selecteddays: userData.selecteddays,
+        subscription: userData.subscription
+      }
+    });
 
-    // Validate required fields
-    if (!priceId) {
+    // Use provided pricing or fallback to default
+    const selectedPricing = pricing || {
+      amount: 5390, // Default fallback
+      currency: 'aed',
+      description: 'Meal Plan'
+    };
+
+    if (!selectedPricing.amount || !selectedPricing.currency) {
       return NextResponse.json(
-        { error: 'Price ID is required' },
+        { error: 'Invalid pricing data' },
         { status: 400 }
       );
     }
 
-    // Map payment cycle to price IDs from environment variables
-    const priceMapping = {
-      weekly: process.env.STRIPE_PRICE_WEEKLY,
-      monthly: process.env.STRIPE_PRICE_MONTHLY,
-      quarterly: process.env.STRIPE_PRICE_QUARTERLY,
-    };
-
-    const stripePriceId = priceMapping[paymentCycle] || priceId;
-
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription', // Subscription-based payment
       payment_method_types: ['card'],
       line_items: [
         {
-          price: stripePriceId,
+          price_data: {
+            currency: selectedPricing.currency,
+            product_data: {
+              name: `Habibi Fitness - ${userData.plan} Plan`,
+              description: `${userData.mealcount} meals, ${userData.selecteddays.length} days/week - ${selectedPricing.description}`,
+              images: ['https://habibi-fitness-web.vercel.app/images/logo-green.png'],
+            },
+            unit_amount: selectedPricing.amount,
+          },
           quantity: 1,
         },
       ],
-      success_url: `${process.env.NEXT_PUBLIC_DOMAIN}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_DOMAIN}/payment/cancel`,
-      customer_email: userEmail || undefined,
-      client_reference_id: userData?.phone || undefined, // Use phone as reference
+      mode: 'payment',
+      success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/user-preference`,
+      customer_email: userEmail,
       metadata: {
-        // Store user data in metadata to retrieve after payment
-        userName: userName || userData?.name || '',
-        userPhone: userData?.phone || '',
-        userAddress: userData?.address || '',
-        userActivity: userData?.activity || '',
-        userPlan: userData?.plan || '',
-        userGoal: userData?.goal || '',
-        userWeight: userData?.weight?.toString() || '',
-        userHeight: userData?.height?.toString() || '',
-        userAge: userData?.age?.toString() || '',
-        userGender: userData?.gender || '',
-        userMealCount: userData?.mealcount?.toString() || '',
-        userMealTypes: JSON.stringify(userData?.mealtypes || []),
-        userSelectedDays: JSON.stringify(userData?.selecteddays || []),
-        userSubscription: userData?.subscription || paymentCycle,
-        userBMI: userData?.bmi || '',
-        userTDEE: userData?.tdee || '',
-        userAllergies: JSON.stringify(userData?.allergies || []),
+        userId: userData.phone, // Using phone as user identifier
+        plan: userData.plan,
+        mealCount: userData.mealcount,
+        selectedDays: JSON.stringify(userData.selecteddays),
+        subscription: userData.subscription,
+        paymentCycle: paymentCycle,
+        // Store complete user data for registration after payment
+        userData: JSON.stringify(userData)
       },
-      subscription_data: {
-        metadata: {
-          // Also store in subscription metadata
-          userPhone: userData?.phone || '',
-          userName: userName || userData?.name || '',
-        },
+      billing_address_collection: 'required',
+      shipping_address_collection: {
+        allowed_countries: ['AE', 'SA', 'KW', 'QA', 'BH', 'OM'], // UAE and neighboring countries
       },
     });
 
+    console.log('✅ Stripe checkout session created:', session.id);
+
     return NextResponse.json({
       success: true,
-      sessionId: session.id,
       url: session.url,
+      sessionId: session.id
     });
+
   } catch (error) {
-    console.error('Stripe checkout session creation error:', error);
+    console.error('❌ Error creating Stripe checkout session:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to create checkout session' },
+      { 
+        success: false,
+        error: error.message 
+      },
       { status: 500 }
     );
   }
 }
-
-

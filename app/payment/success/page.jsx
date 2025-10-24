@@ -1,158 +1,350 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { motion } from 'framer-motion';
+import Header from '../../components/Header';
+import Footer from '../../components/Footer';
+import { font } from '../../components/font/font';
 
 export default function PaymentSuccess() {
+  const [loading, setLoading] = useState(true);
+  const [paymentDetails, setPaymentDetails] = useState(null);
+  const [error, setError] = useState(null);
+  const [userRegistered, setUserRegistered] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
-  const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
-    // Countdown redirect to dashboard
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          router.push('/dashboard');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (sessionId) {
+      verifyPayment(sessionId);
+    } else {
+      setError('No payment session found');
+      setLoading(false);
+    }
+  }, [sessionId]);
 
-    return () => clearInterval(timer);
-  }, [router]);
+  const verifyPayment = async (sessionId) => {
+    try {
+      const response = await fetch(`/api/stripe/verify-session?session_id=${sessionId}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setPaymentDetails(data.session);
+        
+        // Register user directly since webhook isn't working
+        await registerUserAfterPayment(data.session);
+      } else {
+        setError(data.error || 'Failed to verify payment');
+      }
+    } catch (err) {
+      console.error('Error verifying payment:', err);
+      setError('Failed to verify payment');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerUserAfterPayment = async (session) => {
+    try {
+      console.log('🔄 Registering user after payment...');
+      
+      // Extract user data from session metadata
+      const userData = JSON.parse(session.metadata.userData);
+      const userId = session.metadata.userId;
+
+      console.log('📋 User data from payment:', userData);
+      console.log('📋 User allergies:', userData.allergies, typeof userData.allergies);
+
+      // Ensure allergies is always an array
+      let allergiesArray = [];
+      if (Array.isArray(userData.allergies)) {
+        allergiesArray = userData.allergies;
+      } else if (typeof userData.allergies === 'string') {
+        try {
+          allergiesArray = JSON.parse(userData.allergies);
+        } catch (e) {
+          console.log('⚠️ Failed to parse allergies string:', userData.allergies);
+          allergiesArray = [];
+        }
+      }
+
+      console.log('📋 Processed allergies array:', allergiesArray);
+
+      // Ensure mealtypes and selecteddays are arrays
+      let mealtypesArray = Array.isArray(userData.mealtypes) ? userData.mealtypes : [];
+      let selecteddaysArray = Array.isArray(userData.selecteddays) ? userData.selecteddays : [];
+
+      console.log('📋 Processed mealtypes:', mealtypesArray);
+      console.log('📋 Processed selecteddays:', selecteddaysArray);
+
+      // Prepare registration data - only include essential fields that exist in the database
+      const registrationData = {
+        name: userData.name,
+        phone: userData.phone,
+        address: userData.address,
+        plan: userData.plan,
+        goal: userData.goal,
+        weight: userData.weight,
+        height: userData.height,
+        age: userData.age,
+        gender: userData.gender,
+        mealtypes: mealtypesArray, // Use processed array
+        selecteddays: selecteddaysArray, // Use processed array
+        subscription: userData.subscription,
+        bmi: userData.bmi,
+        tdee: userData.tdee,
+        allergies: allergiesArray // Use processed allergies array
+      };
+
+      console.log('📋 Registration data being sent:', registrationData);
+
+      // Register the user in your database
+      const registrationResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
+      });
+
+      const registrationResult = await registrationResponse.json();
+      console.log('📋 Registration response:', registrationResult);
+      console.log('📋 Registration status code:', registrationResponse.status);
+
+      if (registrationResult.success) {
+        console.log('✅ User registered successfully:', registrationResult.data.id);
+        setUserRegistered(true);
+        
+        // Generate meal schedule for the user
+        try {
+          const scheduleResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/schedule/generate`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              userId: registrationResult.data.id,
+              weeks: 4 // Generate 4 weeks of meals
+            }),
+          });
+
+          const scheduleResult = await scheduleResponse.json();
+          
+          if (scheduleResult.success) {
+            console.log('✅ Meal schedule generated for user:', registrationResult.data.id);
+          } else {
+            console.error('❌ Failed to generate meal schedule:', scheduleResult.error);
+          }
+        } catch (scheduleError) {
+          console.error('❌ Error generating meal schedule:', scheduleError);
+        }
+
+        // Send welcome notification
+        try {
+          const notificationResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/notifications/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              title: 'Welcome to Habibi Fitness! 🎉',
+              message: `Your ${userData.plan} meal plan is ready! Check your personalized meal schedule in the app.`,
+              target: 'specific',
+              userIds: [registrationResult.data.id],
+              type: 'welcome',
+              priority: 'high'
+            }),
+          });
+
+          const notificationResult = await notificationResponse.json();
+          if (notificationResult.success) {
+            console.log('✅ Welcome notification sent');
+          }
+        } catch (notificationError) {
+          console.error('❌ Error sending welcome notification:', notificationError);
+        }
+
+      } else {
+        console.error('❌ Failed to register user:', registrationResult);
+        console.error('❌ Registration error details:', registrationResult.error);
+        console.error('❌ Registration status:', registrationResponse.status);
+        setError(`Payment successful but failed to create your account. Error: ${registrationResult.error || registrationResult.message || 'Unknown error'}. Please contact support.`);
+      }
+
+    } catch (dbError) {
+      console.error('❌ Database error during user registration:', dbError);
+      setError('Payment successful but failed to create your account. Please contact support.');
+    }
+  };
+
+  const formatAmount = (amount, currency) => {
+    return new Intl.NumberFormat('en-AE', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(amount / 100);
+  };
+
+  if (loading) {
+    return (
+      <div className={`${font.className}`}>
+        <Header />
+        <main className="min-h-screen mt-16 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Verifying your payment...</p>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={`${font.className}`}>
+        <Header />
+        <main className="min-h-screen mt-16 flex items-center justify-center">
+          <div className="text-center max-w-md mx-auto px-4">
+            <div className="text-red-600 text-6xl mb-4">❌</div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Payment Verification Failed</h1>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <button
+              onClick={() => router.push('/user-preference')}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700"
+            >
+              Try Again
+            </button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex items-center justify-center px-4">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl p-8 md:p-12 text-center"
-      >
-        {/* Success Icon */}
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-          className="w-24 h-24 bg-gradient-to-br from-green-400 to-[#07da63] rounded-full mx-auto mb-6 flex items-center justify-center"
-        >
-          <svg
-            className="w-12 h-12 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={3}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        </motion.div>
+    <div className={`${font.className}`}>
+      <Header />
+      <main className="min-h-screen mt-16">
+        <div className="max-w-2xl mx-auto px-4 py-8">
+          {/* Success Header */}
+          <div className="text-center mb-8">
+            <div className="text-green-600 text-6xl mb-4">✅</div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
+            <p className="text-gray-600">Welcome to Habibi Fitness! Your meal plan is being prepared.</p>
+            {userRegistered && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-green-800 font-semibold">✅ Account created successfully! You can now log in with your phone number.</p>
+              </div>
+            )}
+          </div>
 
-        {/* Success Message */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="text-4xl md:text-5xl font-bold text-gray-900 mb-4"
-        >
-          Payment Successful! 🎉
-        </motion.h1>
+          {/* Payment Details */}
+          {paymentDetails && (
+            <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment Details</h2>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Amount Paid:</span>
+                  <span className="font-semibold">
+                    {formatAmount(paymentDetails.amount_total, paymentDetails.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Payment Method:</span>
+                  <span className="font-semibold">
+                    {paymentDetails.payment_method_types?.[0]?.toUpperCase() || 'Card'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Status:</span>
+                  <span className="text-green-600 font-semibold">Paid</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Date:</span>
+                  <span className="font-semibold">
+                    {new Date(paymentDetails.created * 1000).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="text-lg text-gray-600 mb-8"
-        >
-          Welcome to <span className="font-bold text-[#07da63]">Habibi Fitness</span>! Your subscription is now active.
-        </motion.p>
+          {/* Next Steps */}
+          <div className="bg-green-50 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">What's Next?</h2>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                <p className="text-gray-700">Your personalized meal plan is being generated based on your preferences.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                <p className="text-gray-700">You'll receive a welcome notification when your meal schedule is ready.</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                <p className="text-gray-700">Check your dashboard to view your meal schedule and delivery status.</p>
+              </div>
+            </div>
+          </div>
 
-        {/* Details */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-gradient-to-br from-green-50 to-blue-50 rounded-2xl p-6 mb-8"
-        >
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            What's Next?
-          </h3>
-          <ul className="text-left space-y-3 text-gray-700">
-            <li className="flex items-start gap-3">
-              <span className="text-[#07da63] text-xl">✓</span>
-              <span>Your account has been created successfully</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="text-[#07da63] text-xl">✓</span>
-              <span>You'll receive a confirmation email shortly</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="text-[#07da63] text-xl">✓</span>
-              <span>Your meal plan is being prepared</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="text-[#07da63] text-xl">✓</span>
-              <span>Access your dashboard to view your personalized meals</span>
-            </li>
-          </ul>
-        </motion.div>
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <button
+              onClick={() => router.push('/dashboard')}
+              className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
+            >
+              Go to Dashboard
+            </button>
+            <button
+              onClick={() => router.push('/meal-schedule')}
+              className="flex-1 bg-white text-green-600 border border-green-600 px-6 py-3 rounded-lg hover:bg-green-50 font-semibold"
+            >
+              View Meal Schedule
+            </button>
+          </div>
 
-        {/* Session ID (for reference) */}
-        {sessionId && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="text-sm text-gray-500 mb-6"
-          >
-            Transaction ID: {sessionId.slice(0, 20)}...
-          </motion.p>
-        )}
+          {/* Debug Section */}
+          <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h3 className="text-lg font-semibold text-yellow-800 mb-2">Debug Information</h3>
+            <button
+              onClick={async () => {
+                try {
+                  const response = await fetch('/api/test-user-registration', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                  const result = await response.json();
+                  console.log('🧪 Test registration result:', result);
+                  alert(`Test result: ${JSON.stringify(result, null, 2)}`);
+                } catch (error) {
+                  console.error('Test error:', error);
+                  alert(`Test error: ${error.message}`);
+                }
+              }}
+              className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700"
+            >
+              Test User Registration API
+            </button>
+            <p className="text-sm text-yellow-700 mt-2">
+              Click this button to test if the user registration API is working.
+            </p>
+          </div>
 
-        {/* Redirect Notice */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.7 }}
-          className="mb-6"
-        >
-          <p className="text-gray-600 mb-2">
-            Redirecting to dashboard in <span className="font-bold text-[#07da63] text-xl">{countdown}</span> seconds...
-          </p>
-        </motion.div>
-
-        {/* Action Buttons */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8 }}
-          className="flex flex-col sm:flex-row gap-4 justify-center"
-        >
-          <Link
-            href="/dashboard"
-            className="bg-gradient-to-r from-green-400 to-[#07da63] text-white px-8 py-3 rounded-full font-bold hover:shadow-xl transition-all duration-300 hover:scale-105"
-          >
-            Go to Dashboard Now
-          </Link>
-          <Link
-            href="/menu"
-            className="bg-white text-gray-700 border-2 border-gray-200 px-8 py-3 rounded-full font-bold hover:border-[#07da63] hover:text-[#07da63] transition-all duration-300"
-          >
-            View Menu
-          </Link>
-        </motion.div>
-      </motion.div>
+          {/* Support Info */}
+          <div className="mt-8 text-center">
+            <p className="text-gray-600 mb-2">Need help or have questions?</p>
+            <p className="text-sm text-gray-500">
+              Contact us at{' '}
+              <a href="mailto:support@habibi-fitness.com" className="text-green-600 hover:underline">
+                support@habibi-fitness.com
+              </a>
+            </p>
+          </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }
-
-

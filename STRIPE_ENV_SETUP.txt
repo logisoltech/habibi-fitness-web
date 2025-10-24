@@ -1,0 +1,11 @@
+# Stripe Environment Variables Setup
+# Add these to your .env.local file:
+
+
+
+# Instructions:
+# 1. Replace 'your_stripe_secret_key_here' with your actual Stripe secret key
+# 2. Replace 'your_stripe_publishable_key_here' with your actual Stripe publishable key
+# 3. Replace 'your_webhook_secret_here' with your webhook endpoint secret (optional for now)
+# 4. Make sure to use test keys (sk_test_ and pk_test_) for development
+# 5. For production, use live keys (sk_live_ and pk_live_)

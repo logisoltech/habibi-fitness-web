@@ -137,13 +137,20 @@ class ApiService {
     });
   }
 
-  static async swapMeals(userId, sourceMeal, targetMeal) {
-    console.log('API: swapMeals called with userId:', userId);
-    console.log('Source meal:', sourceMeal);
-    console.log('Target meal:', targetMeal);
+  // User search methods
+  static async getUserById(userId) {
+    return this.request(`/users/${userId}`);
+  }
+
+  static async searchUsers(query) {
+    return this.request(`/users/search?q=${encodeURIComponent(query)}`);
+  }
+
+  static async swapMeals(swapData) {
+    console.log('API: swapMeals called with swapData:', swapData);
     return this.request('/schedule/swap-meals', {
       method: 'POST',
-      body: JSON.stringify({ userId, sourceMeal, targetMeal }),
+      body: JSON.stringify(swapData),
     });
   }
 

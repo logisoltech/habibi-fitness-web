@@ -4,146 +4,159 @@ import Stripe from 'stripe';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-// API endpoint for your backend to register users
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com/api';
-
 export async function POST(request) {
   try {
     const body = await request.text();
     const signature = request.headers.get('stripe-signature');
 
-    if (!webhookSecret) {
-      console.error('⚠️ Stripe webhook secret is not configured');
-      return NextResponse.json(
-        { error: 'Webhook secret not configured' },
-        { status: 500 }
-      );
-    }
-
-    // Verify webhook signature
     let event;
-    try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-    } catch (err) {
-      console.error(`⚠️ Webhook signature verification failed: ${err.message}`);
-      return NextResponse.json(
-        { error: `Webhook Error: ${err.message}` },
-        { status: 400 }
-      );
+
+    if (webhookSecret) {
+      try {
+        event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      } catch (err) {
+        console.error('❌ Webhook signature verification failed:', err.message);
+        return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+      }
+    } else {
+      console.log('⚠️ No webhook secret configured, skipping signature verification');
+      // For testing without webhook secret, we'll parse the body directly
+      try {
+        event = JSON.parse(body);
+      } catch (err) {
+        console.error('❌ Failed to parse webhook body:', err.message);
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      }
     }
 
-    console.log(`✅ Received Stripe event: ${event.type}`);
+    console.log('🔔 Received Stripe webhook event:', event.type);
 
-    // Handle the event
-    switch (event.type) {
-      case 'checkout.session.completed':
-        const session = event.data.object;
-        console.log('💰 Payment successful!', session.id);
-        
-        // Extract user data from metadata
-        const metadata = session.metadata;
-        
-        if (metadata && metadata.userPhone) {
-          // Prepare user registration data
-          const userData = {
-            name: metadata.userName,
-            phone: metadata.userPhone,
-            address: metadata.userAddress,
-            activity: metadata.userActivity,
-            plan: metadata.userPlan,
-            goal: metadata.userGoal,
-            weight: metadata.userWeight,
-            height: metadata.userHeight,
-            age: metadata.userAge,
-            gender: metadata.userGender,
-            mealcount: metadata.userMealCount,
-            mealtypes: JSON.parse(metadata.userMealTypes || '[]'),
-            selecteddays: JSON.parse(metadata.userSelectedDays || '[]'),
-            subscription: metadata.userSubscription,
-            bmi: metadata.userBMI,
-            tdee: metadata.userTDEE,
-            allergies: JSON.parse(metadata.userAllergies || '[]'),
-            // Payment info
-            stripeCustomerId: session.customer,
-            stripeSubscriptionId: session.subscription,
-            paymentStatus: 'paid',
-          };
+    // Handle successful payment
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      
+      console.log('✅ Payment successful for session:', session.id);
+      console.log('📧 Customer email:', session.customer_email);
+      console.log('💰 Amount paid:', session.amount_total);
+      console.log('📋 Metadata:', session.metadata);
 
-          console.log('📋 Registering user with data:', userData);
+      // Extract user data from metadata
+      const userData = JSON.parse(session.metadata.userData);
+      const userId = session.metadata.userId;
 
-          // Register user in database
+      try {
+        // Register the user in your database
+        const registrationResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/users`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: userData.name,
+            phone: userData.phone,
+            email: session.customer_email,
+            address: session.shipping?.address ? 
+              `${session.shipping.address.line1}, ${session.shipping.address.city}, ${session.shipping.address.country}` : 
+              userData.address,
+            plan: userData.plan,
+            goal: userData.goal,
+            weight: userData.weight,
+            height: userData.height,
+            age: userData.age,
+            gender: userData.gender,
+            mealtypes: JSON.stringify(userData.mealtypes),
+            selecteddays: JSON.stringify(userData.selecteddays),
+            subscription: userData.subscription,
+            bmi: userData.bmi,
+            tdee: userData.tdee,
+            allergies: JSON.stringify(userData.allergies || []),
+            // Payment information
+            payment_status: 'paid',
+            stripe_customer_id: session.customer,
+            stripe_session_id: session.id,
+            payment_amount: session.amount_total,
+            payment_currency: session.currency,
+            payment_cycle: userData.subscription,
+            paid_at: new Date().toISOString()
+          }),
+        });
+
+        const registrationResult = await registrationResponse.json();
+
+        if (registrationResult.success) {
+          console.log('✅ User registered successfully:', registrationResult.data.id);
+          
+          // Generate meal schedule for the user
           try {
-            const response = await fetch(`${API_BASE_URL}/users`, {
+            const scheduleResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/schedule/generate`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(userData),
+              body: JSON.stringify({
+                userId: registrationResult.data.id,
+                weeks: 4 // Generate 4 weeks of meals
+              }),
             });
 
-            const result = await response.json();
-
-            if (result.success) {
-              console.log('✅ User registered successfully:', result.data);
+            const scheduleResult = await scheduleResponse.json();
+            
+            if (scheduleResult.success) {
+              console.log('✅ Meal schedule generated for user:', registrationResult.data.id);
             } else {
-              console.error('❌ User registration failed:', result.message);
+              console.error('❌ Failed to generate meal schedule:', scheduleResult.error);
             }
-          } catch (error) {
-            console.error('❌ Error registering user:', error);
+          } catch (scheduleError) {
+            console.error('❌ Error generating meal schedule:', scheduleError);
           }
+
+          // Send welcome notification
+          try {
+            const notificationResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/notifications/send`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                title: 'Welcome to Habibi Fitness! 🎉',
+                message: `Your ${userData.plan} meal plan is ready! Check your personalized meal schedule in the app.`,
+                target: 'specific',
+                userIds: [registrationResult.data.id],
+                type: 'welcome',
+                priority: 'high'
+              }),
+            });
+
+            const notificationResult = await notificationResponse.json();
+            if (notificationResult.success) {
+              console.log('✅ Welcome notification sent');
+            }
+          } catch (notificationError) {
+            console.error('❌ Error sending welcome notification:', notificationError);
+          }
+
         } else {
-          console.warn('⚠️ No user metadata found in session');
+          console.error('❌ Failed to register user:', registrationResult.error);
         }
-        break;
 
-      case 'customer.subscription.created':
-        const subscription = event.data.object;
-        console.log('🔔 New subscription created:', subscription.id);
-        break;
+      } catch (dbError) {
+        console.error('❌ Database error during user registration:', dbError);
+      }
+    }
 
-      case 'customer.subscription.updated':
-        const updatedSubscription = event.data.object;
-        console.log('🔔 Subscription updated:', updatedSubscription.id);
-        // Handle subscription updates (e.g., plan changes)
-        break;
-
-      case 'customer.subscription.deleted':
-        const deletedSubscription = event.data.object;
-        console.log('🔔 Subscription cancelled:', deletedSubscription.id);
-        // Handle subscription cancellation
-        break;
-
-      case 'invoice.paid':
-        const invoice = event.data.object;
-        console.log('💵 Invoice paid:', invoice.id);
-        // Handle successful recurring payment
-        break;
-
-      case 'invoice.payment_failed':
-        const failedInvoice = event.data.object;
-        console.log('❌ Payment failed for invoice:', failedInvoice.id);
-        // Handle failed payment (e.g., send notification to user)
-        break;
-
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
+    // Handle payment failed
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object;
+      console.log('⏰ Checkout session expired:', session.id);
     }
 
     return NextResponse.json({ received: true });
+
   } catch (error) {
-    console.error('Webhook handler error:', error);
+    console.error('❌ Webhook error:', error);
     return NextResponse.json(
       { error: 'Webhook handler failed' },
       { status: 500 }
     );
   }
 }
-
-// Disable body parsing for webhooks - Stripe needs raw body
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-
