@@ -118,6 +118,8 @@ function PaymentSuccessContent() {
         
         // Generate meal schedule for the user
         try {
+          console.log('🔄 Attempting to generate meal schedule for user:', registrationResult.data.id);
+          
           const scheduleResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'https://habibi-fitness-server.onrender.com'}/api/schedule/generate`, {
             method: 'POST',
             headers: {
@@ -129,12 +131,14 @@ function PaymentSuccessContent() {
             }),
           });
 
+          console.log('📋 Schedule generation response status:', scheduleResponse.status);
           const scheduleResult = await scheduleResponse.json();
+          console.log('📋 Schedule generation response:', scheduleResult);
           
           if (scheduleResult.success) {
             console.log('✅ Meal schedule generated for user:', registrationResult.data.id);
           } else {
-            console.error('❌ Failed to generate meal schedule:', scheduleResult.error);
+            console.error('❌ Failed to generate meal schedule:', scheduleResult);
           }
         } catch (scheduleError) {
           console.error('❌ Error generating meal schedule:', scheduleError);
