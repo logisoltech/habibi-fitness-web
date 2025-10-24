@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { font } from '../../components/font/font';
 
-export default function PaymentSuccess() {
+function PaymentSuccessContent() {
   const [loading, setLoading] = useState(true);
   const [paymentDetails, setPaymentDetails] = useState(null);
   const [error, setError] = useState(null);
@@ -346,5 +346,33 @@ export default function PaymentSuccess() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+// Loading component for Suspense fallback
+function PaymentSuccessLoading() {
+  return (
+    <div className={`${font.className}`}>
+      <Header />
+      <main className="min-h-screen mt-16">
+        <div className="max-w-2xl mx-auto px-4 py-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Loading...</h1>
+            <p className="text-gray-600">Verifying your payment...</p>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function PaymentSuccess() {
+  return (
+    <Suspense fallback={<PaymentSuccessLoading />}>
+      <PaymentSuccessContent />
+    </Suspense>
   );
 }
