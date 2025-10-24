@@ -20,7 +20,7 @@ export default function AboutPage() {
                   About <span className="text-[#18BD0F]">Habibi Fitness</span>
                 </h1>
                 <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                  We're passionate about making healthy eating simple, delicious, and accessible. 
+                  We&apos;re passionate about making healthy eating simple, delicious, and accessible. 
                   Our mission is to transform your relationship with food through personalized 
                   meal plans that fit your lifestyle and goals.
                 </p>
@@ -118,17 +118,17 @@ export default function AboutPage() {
                 <h2 className="text-4xl font-bold text-gray-900 mb-6">Our Story</h2>
                 <div className="space-y-6 text-gray-600">
                   <p>
-                    Habibi Fitness was born from a simple realization: eating healthy shouldn't be complicated. 
+                    Habibi Fitness was born from a simple realization: eating healthy shouldn&apos;t be complicated. 
                     As fitness enthusiasts and nutrition experts, we struggled with meal prep, finding time to cook, 
                     and maintaining consistent healthy eating habits.
                   </p>
                   <p>
                     We noticed that many people, despite their best intentions, found it challenging to stick to 
-                    healthy eating plans due to lack of time, knowledge, or motivation. That's when we decided to 
+                    healthy eating plans due to lack of time, knowledge, or motivation. That&apos;s when we decided to 
                     create a solution that would make healthy eating effortless and enjoyable.
                   </p>
                   <p>
-                    Today, we're proud to serve thousands of customers with personalized meal plans that not only 
+                    Today, we&apos;re proud to serve thousands of customers with personalized meal plans that not only 
                     taste amazing but also help them achieve their health and fitness goals. Our team of nutritionists, 
                     chefs, and fitness experts work together to ensure every meal is perfectly balanced and delicious.
                   </p>
@@ -187,7 +187,7 @@ export default function AboutPage() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-4">Transparency</h3>
                 <p className="text-gray-600">
-                  We're open about our ingredients, processes, and nutritional information.
+                  We&apos;re open about our ingredients, processes, and nutritional information.
                 </p>
               </div>
               
