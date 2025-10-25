@@ -52,8 +52,8 @@ export async function POST(request) {
         },
       ],
       mode: 'payment',
-      success_url: '/payment/success?session_id={CHECKOUT_SESSION_ID}',
-      cancel_url: '/user-preference',
+      success_url: 'https://habibi-fitness-web.vercel.app/payment/success?session_id={CHECKOUT_SESSION_ID}',
+      cancel_url: 'https://habibi-fitness-web.vercel.app/user-preference',
       customer_email: userEmail,
       metadata: {
         userId: userData.phone, // Using phone as user identifier
