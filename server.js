@@ -1,8 +1,69 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config();
+
+
+// Simple meal generation function (no external dependencies)
+function generateSimpleMealSchedule(userData, availableMeals, weeks = 4) {
+  try {
+    console.log('=== SIMPLE MEAL GENERATION ===');
+    console.log('User:', userData.id, 'Meals:', availableMeals?.length || 0);
+    
+    const schedule = {
+      userId: userData.id || userData.userId,
+      subscription: userData.subscription || 'monthly',
+      plan: userData.plan || 'Monthly Plan',
+      startDate: new Date(),
+      weeks: [],
+      totalMeals: 0,
+      fiveStarMeals: 0,
+      generatedAt: new Date().toISOString()
+    };
+
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    const mealTypes = ['breakfast', 'lunch', 'dinner'];
+    
+    for (let week = 1; week <= weeks; week++) {
+      const weekSchedule = {
+        week: week,
+        days: {},
+        totalMeals: 0,
+        fiveStarMeals: 0
+      };
+      
+      days.forEach(day => {
+        weekSchedule.days[day] = {};
+        
+        mealTypes.forEach(mealType => {
+          const availableMealsForType = availableMeals.filter(meal => 
+            meal.category === mealType || meal.category === mealType.toLowerCase()
+          );
+          
+          if (availableMealsForType.length > 0) {
+            const randomMeal = availableMealsForType[Math.floor(Math.random() * availableMealsForType.length)];
+            weekSchedule.days[day][mealType] = randomMeal;
+            weekSchedule.totalMeals++;
+            
+            if (randomMeal.rating >= 5) {
+              weekSchedule.fiveStarMeals++;
+            }
+          }
+        });
+      });
+      
+      schedule.weeks.push(weekSchedule);
+      schedule.totalMeals += weekSchedule.totalMeals;
+      schedule.fiveStarMeals += weekSchedule.fiveStarMeals;
+    }
+    
+    console.log('✅ Simple meal generation completed:', schedule.totalMeals, 'meals');
+    return schedule;
+  } catch (error) {
+    console.error('❌ Simple meal generation failed:', error);
+    throw error;
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -567,6 +628,79 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Test endpoint to trigger meal generation (for debugging)
+app.get('/api/test-generate/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    console.log(`🧪 Test meal generation for user: ${userId}`);
+    
+    // Get user data
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (userError || !user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+        error: userError?.message
+      });
+    }
+    
+    // Get meals
+    const { data: meals, error: mealsError } = await supabase
+      .from('meals')
+      .select('*');
+    
+    if (mealsError || !meals || meals.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No meals available',
+        error: mealsError?.message
+      });
+    }
+    
+    // Generate meal schedule using inline function (no external dependencies)
+    const schedule = generateSimpleMealSchedule(user, meals, 4);
+    
+    // Save to database
+    const { data: savedSchedule, error: saveError } = await supabase
+      .from('meal_schedules')
+      .upsert({
+        user_id: userId,
+        subscription: user.subscription || 'monthly',
+        schedule_data: schedule,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+    
+    if (saveError) {
+      console.error('Save error:', saveError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to save schedule',
+        error: saveError.message
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Meal schedule generated and saved successfully',
+      schedule: schedule
+    });
+    
+  } catch (error) {
+    console.error('Test generation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Test generation failed',
+      error: error.message
+    });
+  }
+});
+
 // Simple test endpoint
 app.get('/api/test', (req, res) => {
   res.json({
@@ -847,11 +981,8 @@ app.get('/api/schedule/test', async (req, res) => {
       });
     }
     
-    // Test meal scheduler
-    const MealScheduler = require('./app/services/mealScheduler');
-    const scheduler = new MealScheduler();
-    
-    const testSchedule = scheduler.generateMealSchedule(users[0], meals, 1);
+    // Test meal scheduler using inline function
+    const testSchedule = generateSimpleMealSchedule(users[0], meals, 1);
     
     res.json({
       success: true,
@@ -956,11 +1087,7 @@ app.post('/api/schedule/generate', async (req, res) => {
       });
     }
 
-    // Import and use meal scheduler
-    const MealScheduler = require('./app/services/mealScheduler');
-    const scheduler = new MealScheduler();
-    
-    // Generate schedule
+    // Generate schedule using inline function (no external dependencies)
     console.log('🔄 Generating schedule for user:', userData.id);
     console.log('🔄 Available meals count:', meals?.length || 0);
     console.log('🔄 Weeks to generate:', weeks);
@@ -975,8 +1102,8 @@ app.post('/api/schedule/generate', async (req, res) => {
     
     let schedule;
     try {
-      console.log('🔄 Calling meal scheduler...');
-      schedule = scheduler.generateMealSchedule(userData, meals, weeks);
+      console.log('🔄 Calling inline meal scheduler...');
+      schedule = generateSimpleMealSchedule(userData, meals, weeks);
       console.log('✅ Meal schedule generated successfully');
       console.log('📋 Schedule structure:', {
         weeks: schedule.weeks?.length || 0,
@@ -1153,12 +1280,8 @@ app.put('/api/schedule/:userId', async (req, res) => {
       throw mealsError;
     }
 
-    // Import and use meal scheduler
-    const MealScheduler = require('./app/services/mealScheduler');
-    const scheduler = new MealScheduler();
-    
-    // Generate new schedule
-    const schedule = scheduler.generateMealSchedule(userData, meals, 4);
+    // Generate new schedule using inline function
+    const schedule = generateSimpleMealSchedule(userData, meals, 4);
 
     // Update schedule in database
     const { data: updatedSchedule, error: updateError } = await supabase
