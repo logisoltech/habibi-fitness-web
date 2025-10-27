@@ -124,21 +124,19 @@ export default function UserPreference() {
   ];
 
   const handleMealTimeToggle = (mealId) => {
+    // Prevent deselecting lunch or dinner (they are mandatory)
+    if ((mealId === 'lunch' || mealId === 'dinner') && selectedMealTimes.includes(mealId)) {
+      setMealTimeError("Lunch and Dinner are required and cannot be deselected");
+      return;
+    }
+
     setSelectedMealTimes((prev) => {
       const newSelection = prev.includes(mealId)
         ? prev.filter((id) => id !== mealId)
         : [...prev, mealId];
 
-      // Validate meal requirements
-      if (newSelection.length < 2) {
-        setMealTimeError("Please select at least 2 meals");
-      } else if (
-        !newSelection.includes("lunch") ||
-        !newSelection.includes("dinner")
-      ) {
-        setMealTimeError("Please select lunch and dinner");
-        console.log("Selected Meal Times", newSelection);
-      } else {
+      // Clear error if valid
+      if (newSelection.includes("lunch") && newSelection.includes("dinner")) {
         setMealTimeError("");
       }
 
@@ -180,28 +178,47 @@ export default function UserPreference() {
     }, 0);
   };
 
-  // Fixed pricing as specified
+  // Fixed base pricing (for lunch + dinner only)
   const calculatePricing = () => {
+    // Calculate additional cost based on selected meals
+    let additionalCost = 0;
+    const hasBreakfast = selectedMealTimes.includes('breakfast');
+    const hasSnack = selectedMealTimes.includes('snack');
+    
+    if (hasBreakfast) {
+      additionalCost += 390;
+    }
+    if (hasSnack) {
+      additionalCost += 195;
+    }
+
+    // Base prices for lunch + dinner
+    const basePrices = {
+      weekly: 549.99,
+      monthly: 1899.99,
+      quarterly: 5699.99,
+    };
+
     return {
       weekly: {
         id: "weekly",
         title: "Weekly",
-        totalPrice: 549.99,
-        pricePerDay: 78.57, // 549.99 / 7
+        totalPrice: basePrices.weekly + additionalCost,
+        pricePerDay: ((basePrices.weekly + additionalCost) / 7).toFixed(2),
         popular: false,
       },
       monthly: {
         id: "monthly",
         title: "Monthly",
-        totalPrice: 1899.99,
-        pricePerDay: 63.33, // 1899.99 / 30
+        totalPrice: basePrices.monthly + additionalCost,
+        pricePerDay: ((basePrices.monthly + additionalCost) / 30).toFixed(2),
         popular: true,
       },
       quarterly: {
         id: "quarterly",
         title: "3-Months",
-        totalPrice: 5699.99,
-        pricePerDay: 63.33, // 5699.99 / 90
+        totalPrice: basePrices.quarterly + additionalCost,
+        pricePerDay: ((basePrices.quarterly + additionalCost) / 90).toFixed(2),
         popular: false,
       },
     };

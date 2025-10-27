@@ -82,8 +82,7 @@ const GoalPage = () => {
         }
     };
 
-    const isFormValid = selectedGoal !== null &&
-        (selectedConditions.length > 0 || customAllergies.length > 0);
+    const isFormValid = selectedGoal !== null;
 
   const handleSubmit = () => {
     if (!isFormValid) return;
@@ -91,9 +90,9 @@ const GoalPage = () => {
     // Save goal to context
     updateGoal(selectedGoal);
     
-    // Combine selected conditions and custom allergies
+    // Combine selected conditions and custom allergies, or use 'none' if empty
     const allergies = [...selectedConditions, ...customAllergies];
-    updateAllergies(allergies);
+    updateAllergies(allergies.length > 0 ? allergies : ['none']);
     
     // Navigate to user-preference page (next step: dietary plan + meal selection)
     router.push('/user-preference');
