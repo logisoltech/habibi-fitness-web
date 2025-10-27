@@ -128,7 +128,7 @@ export default function Header() {
       {/* Top Offer Banner */}
       {showBanner && (
         <div
-          className="w-full text-sm gap-3 px-10 py-3 max-sm:px-4 text-white max-sm:text-xs max-sm:text-center"
+          className="fixed top-0 left-0 w-full text-sm gap-3 px-10 py-3 max-sm:px-4 text-white max-sm:text-xs max-sm:text-center z-50"
           style={{ backgroundColor: MAIN }}
         >
           <span className="font-semibold">Limited Time Offer! </span>
@@ -149,7 +149,7 @@ export default function Header() {
       )}
 
       {/* Navbar */}
-      <header className="absolute z-40 top-15 left-8 right-8 shadow-lg rounded-full border-t-2 border-gray-200">
+      <header className={`fixed z-40 left-8 right-8 shadow-lg rounded-full border-t-2 border-gray-200 transition-all duration-300 ${showBanner ? 'top-[76px]' : 'top-4'}`}>
         <nav className="flex mx-auto items-center justify-between bg-white rounded-full px-6 py-2 text-black">
           {/* Left: Logo */}
           <Link href="/" className="flex items-center gap-2">
