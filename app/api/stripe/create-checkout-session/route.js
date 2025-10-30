@@ -6,28 +6,34 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function POST(request) {
   try {
-    const { paymentCycle, userEmail, userName, userData, pricing } = await request.json();
+    const body = await request.json();
+    const { paymentCycle, userEmail, userName, userData, pricing, amount, currency, description, metadata } = body || {};
+
+    // Support both legacy payload (pricing + userData) and simplified payload (amount/currency/description/metadata)
+    const selectedPricing = pricing || (amount && currency ? { amount, currency, description: description || 'Subscription' } : null);
+
+    // Build product display details safely
+    const planName = userData?.plan || metadata?.subscription || 'Subscription';
+    const mealCount = userData?.mealcount || metadata?.mealCount || '';
+    const selectedDaysText = userData?.selecteddays ? `${userData.selecteddays.length} days/week` : '';
 
     console.log('🛒 Creating Stripe checkout session for:', {
       paymentCycle,
       userEmail,
       userName,
-      userData: {
-        plan: userData.plan,
-        mealcount: userData.mealcount,
-        selecteddays: userData.selecteddays,
-        subscription: userData.subscription
-      }
+      planName,
+      amount: selectedPricing?.amount,
+      currency: selectedPricing?.currency,
     });
 
     // Use provided pricing or fallback to default
-    const selectedPricing = pricing || {
+    const finalPricing = selectedPricing || {
       amount: 5390, // Default fallback
       currency: 'aed',
       description: 'Meal Plan'
     };
 
-    if (!selectedPricing.amount || !selectedPricing.currency) {
+    if (!finalPricing.amount || !finalPricing.currency) {
       return NextResponse.json(
         { error: 'Invalid pricing data' },
         { status: 400 }
@@ -40,13 +46,13 @@ export async function POST(request) {
       line_items: [
         {
           price_data: {
-            currency: selectedPricing.currency,
+            currency: finalPricing.currency,
             product_data: {
-              name: `Habibi Fitness - ${userData.plan} Plan`,
-              description: `${userData.mealcount} meals, ${userData.selecteddays.length} days/week - ${selectedPricing.description}`,
+              name: `Habibi Fitness - ${planName}`,
+              description: `${mealCount ? mealCount + ' meals, ' : ''}${selectedDaysText}${selectedDaysText && finalPricing.description ? ' - ' : ''}${finalPricing.description || ''}`.trim(),
               images: ['https://habibi-fitness-web.vercel.app/images/logo-green.png'],
             },
-            unit_amount: selectedPricing.amount,
+            unit_amount: finalPricing.amount,
           },
           quantity: 1,
         },
@@ -56,14 +62,13 @@ export async function POST(request) {
       cancel_url: 'https://habibi-fitness-web.vercel.app/user-preference',
       customer_email: userEmail,
       metadata: {
-        userId: userData.phone, // Using phone as user identifier
-        plan: userData.plan,
-        mealCount: userData.mealcount,
-        selectedDays: JSON.stringify(userData.selecteddays),
-        subscription: userData.subscription,
-        paymentCycle: paymentCycle,
-        // Store complete user data for registration after payment
-        userData: JSON.stringify(userData)
+        ...(metadata || {}),
+        plan: userData?.plan || metadata?.plan || planName,
+        mealCount: userData?.mealcount || metadata?.mealCount || '',
+        selectedDays: userData?.selecteddays ? JSON.stringify(userData.selecteddays) : (metadata?.selectedDays || ''),
+        subscription: userData?.subscription || metadata?.subscription || '',
+        paymentCycle: paymentCycle || metadata?.paymentCycle || '',
+        ...(userData ? { userData: JSON.stringify(userData) } : {}),
       },
       billing_address_collection: 'required',
       shipping_address_collection: {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { FaDollarSign, FaRegCalendarAlt } from "react-icons/fa";
 
 export default function Sidebar({ onClose, onLogout }) {
   return (
@@ -91,7 +92,67 @@ export default function Sidebar({ onClose, onLogout }) {
           </ul>
         </div>
 
-        {/* Group 2: Feedback & Sharing */}
+        {/* Calender */}
+        <div className="mb-8">
+          <h6 className="text-green-600 text-[15px] font-semibold px-4 mb-4">
+            Calender
+          </h6>
+          <ul className="space-y-1">
+            <li>
+              <Link
+                href="/meal-schedule"
+                onClick={onClose}
+                className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all"
+              >
+                <FaRegCalendarAlt className="w-5 h-5 mr-3 text-green-600" />
+                <span>Your Scheduled Meals</span>
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {/* Group 2: Profile */}
+        <div className="mb-8">
+          <h6 className="text-green-600 text-[15px] font-semibold px-4 mb-4">
+            Profile
+          </h6>
+          <ul className="space-y-1">
+            <li>
+              <Link href="/profile/bmi" onClick={onClose} className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all">
+                <svg className="w-5 h-5 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>BMI</span>
+              </Link>
+            </li>
+            <li>
+              <Link href="/profile/tdee" onClick={onClose} className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all">
+                <svg className="w-5 h-5 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2m0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                <span>TDEE</span>
+              </Link>
+            </li>
+            <li>
+              <Link href="/profile/goal" onClick={onClose} className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all">
+                <svg className="w-5 h-5 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Your Goal</span>
+              </Link>
+            </li>
+            <li>
+              <Link href="/profile/meal-plan" onClick={onClose} className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all">
+                <svg className="w-5 h-5 mr-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Your Meal Plan</span>
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {/* Group 3: Feedback & Sharing */}
         <div className="mb-8">
           <h6 className="text-green-600 text-[15px] font-semibold px-4 mb-4">
             Feedback & Sharing
@@ -161,6 +222,25 @@ export default function Sidebar({ onClose, onLogout }) {
                   />
                 </svg>
                 <span>Share Transformation</span>
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {/* Billing & Subscription */}
+        <div className="mb-8">
+          <h6 className="text-green-600 text-[15px] font-semibold px-4 mb-4">
+            Billing & Subscription
+          </h6>
+          <ul className="space-y-1">
+            <li>
+              <Link
+                href="/billing/subscription"
+                onClick={onClose}
+                className="text-slate-800 font-medium hover:text-slate-900 text-[15px] flex items-center hover:bg-gray-100 rounded px-4 py-3 transition-all"
+              >
+                <FaDollarSign className="w-5 h-5 mr-3 text-green-600" />
+                <span>Your Subscription Plan</span>
               </Link>
             </li>
           </ul>

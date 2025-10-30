@@ -176,18 +176,67 @@ async function populateUserMeals(userId, schedule, supabase) {
 // Get all meals
 app.get('/api/meals', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { category, dietary_tags, limit, offset } = req.query;
+    
+    let query = supabase
       .from('meals')
       .select('*');
+
+    // Apply category filter
+    if (category) {
+      query = query.eq('category', category);
+    }
+
+    // Apply dietary tags filter
+    if (dietary_tags) {
+      const trimmedTag = dietary_tags.trim();
+      query = query.contains('dietary_tags', [trimmedTag]);
+    }
+
+    // Apply pagination
+    const parsedLimit = parseInt(limit) || 8;
+    const parsedOffset = parseInt(offset) || 0;
+    
+    if (limit || offset) {
+      query = query.range(parsedOffset, parsedOffset + parsedLimit - 1);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw error;
     }
 
+    // Get total count for pagination
+    let countQuery = supabase
+      .from('meals')
+      .select('*', { count: 'exact', head: true });
+
+    if (category) {
+      countQuery = countQuery.eq('category', category);
+    }
+
+    if (dietary_tags) {
+      const trimmedTag = dietary_tags.trim();
+      countQuery = countQuery.contains('dietary_tags', [trimmedTag]);
+    }
+
+    const { count } = await countQuery;
+
     res.json({
       success: true,
       data: data,
-      message: 'Meals fetched successfully'
+      message: 'Meals fetched successfully',
+      pagination: {
+        total: count || 0,
+        limit: parsedLimit,
+        offset: parsedOffset,
+        hasMore: parsedOffset + parsedLimit < (count || 0)
+      },
+      filters: {
+        category: category || null,
+        dietary_tags: dietary_tags ? dietary_tags.trim() : null
+      }
     });
   } catch (error) {
     console.error('Error fetching meals:', error);

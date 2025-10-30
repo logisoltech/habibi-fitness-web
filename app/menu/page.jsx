@@ -89,10 +89,28 @@ export default function MealsExample() {
       if (mealTime && mealTime !== "all") {
         apiFilters.category = getCategoryForMealTime(mealTime);
       }
+      
+      // Add a large limit to get all filtered results
+      apiFilters.limit = 500;
+      apiFilters.offset = 0;
 
       const result = await fetchMeals(apiFilters);
-      setMeals(result.data);
-      console.log("Meals fetched:", result);
+      console.log("Raw API result:", result);
+      console.log("Meals array:", result.data);
+      console.log("Meals count:", result.data?.length);
+      console.log("API filters sent:", apiFilters);
+      console.log("API response filters:", result.filters);
+      
+      // Show a sample of dietary tags from the returned meals
+      if (result.data && result.data.length > 0) {
+        const sampleTags = result.data.slice(0, 5).map(m => ({ 
+          name: m.name, 
+          tags: m.dietary_tags 
+        }));
+        console.log("Sample meals with tags:", sampleTags);
+      }
+      
+      setMeals(result.data || []);
       console.log("Applied filters:", apiFilters);
     } catch (err) {
       setError(err.message);
@@ -107,14 +125,16 @@ export default function MealsExample() {
   };
 
   const handlePreferenceSelect = async (preferenceId) => {
+    console.log('Changing preference from', selectedPreference, 'to', preferenceId);
     setSelectedPreference(preferenceId);
-    // Auto-fetch meals with new preference
+    // Pass both the new preference and current mealTime to ensure correct filtering
     await fetchMealsWithFilters(preferenceId, selectedMealTime);
   };
 
   const handleMealTimeSelect = async (mealTimeId) => {
+    console.log('Changing mealTime from', selectedMealTime, 'to', mealTimeId);
     setSelectedMealTime(mealTimeId);
-    // Auto-fetch meals with new meal time
+    // Pass both current preference and new mealTime to ensure correct filtering
     await fetchMealsWithFilters(selectedPreference, mealTimeId);
   };
 

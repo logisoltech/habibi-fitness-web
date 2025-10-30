@@ -456,7 +456,6 @@ export default function Dashboard() {
       id: "breakfast",
       image: "/images/dashboard/breakfast.png",
       title: "Breakfast of Champions",
-      price: "AED 10.00",
       description:
         "Fluffy pancakes topped with fresh blueberries and strawberries, drizzled with pure maple syrup. A delicious way to start your day!",
     },
@@ -464,7 +463,6 @@ export default function Dashboard() {
       id: "lunch",
       image: "/images/dashboard/lunch.png",
       title: "Healthy Lunch",
-      price: "AED 10.00",
       description:
         "A vibrant quinoa salad with cherry tomatoes, cucumber, and a zesty lemon vinaigrette. Packed with nutrients, it's the perfect midday boost!",
     },
@@ -472,7 +470,6 @@ export default function Dashboard() {
       id: "dinner",
       image: "/images/dashboard/dinner.png",
       title: "Healthy Dinner",
-      price: "AED 10.00",
       description:
         "A delicious grilled salmon served with a side of steamed asparagus and quinoa. This nutritious meal is rich in omega-3 fatty acids and perfect for a satisfying dinner!",
     },
